@@ -4,6 +4,29 @@ import { useEffect, useRef, useState } from "react";
 
 type WatchStatus = "queued" | "sampling" | "watching" | "ready" | "failed";
 
+type CvDetection = {
+  bbox: [number, number, number, number]; // normalized [x1, y1, x2, y2]
+  confidence: number;
+  kind: "ball" | "person";
+  label: string;
+};
+
+type CvContext = {
+  peakFrame?: {
+    detections: CvDetection[];
+    imageDataUrl: string;
+    peopleCount: number;
+    timestampSeconds: number;
+  };
+  summary: {
+    avgPeopleCount: number;
+    framesWithPeople: number;
+    maxPeopleCount: number;
+    provider: "fallback" | "roboflow" | "yolo";
+    totalFrames: number;
+  };
+};
+
 type WatchCandidate = {
   confidence: number;
   evidenceBucket?: "check_this" | "hidden_low_value" | "not_enough_evidence" | "report_ready";
@@ -29,6 +52,8 @@ type WatchJob = {
   clipSummary?: string;
   compiledIntent?: string;
   createdAt: string;
+  cvContext?: CvContext;
+  cvStatus?: "failed" | "idle" | "ready" | "sampling";
   error?: string;
   id: string;
   limitations?: string[];
@@ -126,10 +151,10 @@ export function AxisWatchRoot() {
     };
     setJobs((currentJobs) => [baseJob, ...currentJobs]);
 
-    // Compiler decides routing — deep watch (TwelveLabs) when a file is attached.
-    // Fast watch (frame sampling) runs when TwelveLabs is unavailable as a fallback.
+    // CV pre-scan runs before Deep Watch so its summary can be injected into the prompt.
+    // Fast watch (frame sampling) skips CV and runs OpenAI directly.
     if (clipFile) {
-      void runDeepWatch(jobId);
+      void runCvThenDeepWatch(jobId);
     } else {
       void runFastWatch(jobId);
     }
@@ -174,7 +199,79 @@ export function AxisWatchRoot() {
     }
   }
 
-  async function runDeepWatch(jobId: string) {
+  async function runCvThenDeepWatch(jobId: string) {
+    const cvSummary = await runCvContext(jobId);
+    await runDeepWatch(jobId, cvSummary ?? undefined);
+  }
+
+  async function runCvContext(jobId: string): Promise<CvContext["summary"] | null> {
+    if (!clipUrl) return null;
+    updateJob(jobId, { cvStatus: "sampling" });
+
+    try {
+      // Sample 1 frame/second, cap at 25 frames — fast enough for CV and stays under route limit
+      const frames = await sampleVideoFrames(clipUrl, 25);
+
+      const response = await fetch("/api/axis/watch/cv-context", {
+        body: JSON.stringify({ frames }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        updateJob(jobId, { cvStatus: "failed" });
+        return null;
+      }
+
+      const data = (await response.json()) as {
+        frameResults?: Array<{
+          detections: CvDetection[];
+          needsReview: boolean;
+          peopleCount: number;
+          timestampSeconds: number;
+        }>;
+        summary?: CvContext["summary"];
+      };
+
+      const frameResults = data.frameResults ?? [];
+      const summary = data.summary;
+
+      if (!summary) {
+        updateJob(jobId, { cvStatus: "failed" });
+        return null;
+      }
+
+      // Find the frame with the most people for the canvas overlay preview
+      const peakResult = frameResults.reduce<(typeof frameResults)[0] | null>(
+        (best, curr) => (curr.peopleCount > (best?.peopleCount ?? 0) ? curr : best),
+        null,
+      );
+
+      let peakFrame: CvContext["peakFrame"];
+      if (peakResult && peakResult.peopleCount > 0) {
+        // Match back to the local frame to retrieve its imageDataUrl
+        const localFrame = frames.find(
+          (f) => Math.abs(f.timestampSeconds - peakResult.timestampSeconds) < 0.5,
+        );
+        if (localFrame) {
+          peakFrame = {
+            detections: peakResult.detections,
+            imageDataUrl: localFrame.imageDataUrl,
+            peopleCount: peakResult.peopleCount,
+            timestampSeconds: peakResult.timestampSeconds,
+          };
+        }
+      }
+
+      updateJob(jobId, { cvContext: { peakFrame, summary }, cvStatus: "ready" });
+      return summary;
+    } catch {
+      updateJob(jobId, { cvStatus: "failed" });
+      return null;
+    }
+  }
+
+  async function runDeepWatch(jobId: string, cvSummary?: CvContext["summary"]) {
     if (!clipFile) {
       updateJob(jobId, { error: "Attach a clip file to use Deep Watch.", status: "failed" });
       return;
@@ -189,6 +286,9 @@ export function AxisWatchRoot() {
       form.append("query", query.trim());
       form.append("clipName", clipFile.name);
       form.append("mode", "deep_watch");
+      if (cvSummary) {
+        form.append("cvSummary", JSON.stringify(cvSummary));
+      }
 
       const response = await fetch("/api/axis/watch", { body: form, method: "POST" });
       type DeepWatchPayloadResponse = {
@@ -408,7 +508,7 @@ export function AxisWatchRoot() {
             <div className="axis-watch__plus-wrap">
               <button
                 aria-controls="axis-watch-tool-menu"
-                aria-expanded={toolMenuOpen ? "true" : "false"}
+                aria-expanded={toolMenuOpen}
                 aria-label="Open clip tools"
                 className="axis-watch__plus"
                 onClick={() => setToolMenuOpen((isOpen) => !isOpen)}
@@ -468,6 +568,10 @@ export function AxisWatchRoot() {
 
         {activeJob && <ExecutionCard job={activeJob} onRetry={() => void watchWithAxis()} />}
 
+        {(activeJob?.cvStatus === "ready" || latestReadyJob?.cvContext) && (
+          <CvPreview cvContext={(activeJob?.cvStatus === "ready" ? activeJob : latestReadyJob)?.cvContext} />
+        )}
+
         {latestReadyJob && (
           <AxisReport
             job={latestReadyJob}
@@ -526,6 +630,83 @@ export function AxisWatchRoot() {
   );
 }
 
+function CvPreview({ cvContext }: { cvContext: CvContext | undefined }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const peak = cvContext?.peakFrame;
+    if (!canvas || !peak?.imageDataUrl) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const img = new Image();
+    img.src = peak.imageDataUrl;
+    img.onload = () => {
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      ctx.lineWidth = 2;
+      ctx.font = "bold 11px sans-serif";
+
+      for (const det of peak.detections) {
+        const [x1, y1, x2, y2] = det.bbox;
+        const px = x1 * img.width;
+        const py = y1 * img.height;
+        const pw = (x2 - x1) * img.width;
+        const ph = (y2 - y1) * img.height;
+
+        ctx.strokeStyle = det.kind === "person" ? "#b7ff5c" : "#ff9800";
+        ctx.strokeRect(px, py, pw, ph);
+
+        ctx.fillStyle = det.kind === "person" ? "#b7ff5c" : "#ff9800";
+        ctx.fillRect(px, py - 16, ctx.measureText(det.label).width + 8, 16);
+        ctx.fillStyle = "#141610";
+        ctx.fillText(det.label, px + 4, py - 4);
+      }
+    };
+  }, [cvContext?.peakFrame]);
+
+  if (!cvContext) return null;
+
+  const { summary, peakFrame } = cvContext;
+
+  return (
+    <section className="axis-watch__card axis-cv" aria-labelledby="axis-cv-title">
+      <div className="axis-watch__section-title">
+        <h2 id="axis-cv-title">What Axis Saw</h2>
+        <span className="axis-cv__provider">{summary.provider}</span>
+      </div>
+
+      <dl className="axis-cv__summary">
+        <div>
+          <dt>People visible</dt>
+          <dd>{summary.maxPeopleCount} max · {summary.avgPeopleCount} avg</dd>
+        </div>
+        <div>
+          <dt>Frames with people</dt>
+          <dd>{summary.framesWithPeople} / {summary.totalFrames}</dd>
+        </div>
+      </dl>
+
+      {peakFrame && (
+        <div className="axis-cv__preview">
+          <canvas className="axis-cv__canvas" ref={canvasRef} />
+          <span className="axis-cv__frame-label">
+            {peakFrame.peopleCount} {peakFrame.peopleCount === 1 ? "person" : "people"} · {formatTimestamp(peakFrame.timestampSeconds)}
+          </span>
+        </div>
+      )}
+
+      {summary.provider === "fallback" && (
+        <p className="axis-cv__fallback">CV detector offline. People counts are unavailable for this clip.</p>
+      )}
+    </section>
+  );
+}
+
 function AxisReport({
   job,
   onIncludeInReport,
@@ -533,7 +714,7 @@ function AxisReport({
   job: WatchJob;
   onIncludeInReport: (id: string) => void;
 }) {
-  void onIncludeInReport; // available for future promoted-finding UI
+  void onIncludeInReport;
   const reportFindings = job.candidates.filter((c) => c.status === "accepted");
   const sorted = [...reportFindings].sort((a, b) => (b.evidenceScore ?? 0) - (a.evidenceScore ?? 0));
   const bestMoment = sorted[0];
@@ -541,15 +722,59 @@ function AxisReport({
     (c) => c.labels.includes("breakdown") || c.labels.includes("spacing_issue"),
   );
   const nextAction = job.suggestedNextQueries?.[0];
+  const cv = job.cvContext?.summary;
+
+  function copyReport() {
+    const lines: string[] = [
+      `AXIS REPORT — ${job.clipName}`,
+      new Date().toLocaleDateString(),
+      "",
+      `Axis watched for: ${job.compiledIntent ?? job.query}`,
+    ];
+
+    if (cv) {
+      lines.push("", "CV EVIDENCE");
+      lines.push(`Provider: ${cv.provider}`);
+      lines.push(`People visible: ${cv.maxPeopleCount} max (avg ${cv.avgPeopleCount})`);
+      lines.push(`Frames with people: ${cv.framesWithPeople}/${cv.totalFrames}`);
+    }
+
+    if (reportFindings.length > 0) {
+      lines.push("", "KEY FINDINGS");
+      for (const f of reportFindings) {
+        lines.push(`[${formatTimestamp(f.timestampSeconds)}] ${f.title} — ${f.note}`);
+      }
+    }
+
+    const checkItems = job.candidates.filter((c) => c.evidenceBucket === "check_this" && c.status === "pending");
+    if (checkItems.length > 0) {
+      lines.push("", "CHECK THESE");
+      for (const c of checkItems) {
+        lines.push(`[${formatTimestamp(c.timestampSeconds)}] ${c.title}`);
+      }
+    }
+
+    void navigator.clipboard.writeText(lines.join("\n"));
+  }
 
   return (
     <section className="axis-watch__card axis-report" aria-labelledby="axis-report-title" id="axis-report">
       <div className="axis-watch__section-title">
         <h2 id="axis-report-title">Axis Report</h2>
-        <span>{reportFindings.length} finding{reportFindings.length === 1 ? "" : "s"}</span>
+        <div className="axis-report__title-actions">
+          <span>{reportFindings.length} finding{reportFindings.length === 1 ? "" : "s"}</span>
+          <button className="axis-report__export" onClick={copyReport} type="button">Copy</button>
+        </div>
       </div>
 
       <p className="axis-report__intent">{job.compiledIntent ?? job.query}</p>
+
+      {cv && (
+        <div className="axis-report__cv-row">
+          <span className="axis-report__label">What Axis saw</span>
+          <span className="axis-report__cv-stat">{cv.maxPeopleCount} people visible · {cv.framesWithPeople}/{cv.totalFrames} frames · {cv.provider}</span>
+        </div>
+      )}
 
       {reportFindings.length === 0 ? (
         <p>Axis found moments worth checking — none cleared automatically. Review below.</p>
@@ -685,6 +910,12 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
     ? `${job.sampledFrameCount} frames checked`
     : "Full clip";
 
+  const cvLabel =
+    job.cvStatus === "sampling" ? "Scanning…"
+    : job.cvStatus === "ready" ? `${job.cvContext?.summary.maxPeopleCount ?? 0} people`
+    : job.cvStatus === "failed" ? "CV unavailable"
+    : null;
+
   return (
     <section className="axis-watch__card axis-watch__execution" aria-labelledby="axis-execution-title" data-status={job.status}>
       <div className="axis-watch__section-title">
@@ -709,7 +940,8 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
       </ol>
       <div className="axis-watch__execution-meta">
         <span>{metaLabel}</span>
-        {job.status === "ready" && <span>{job.candidates.length} moments to review</span>}
+        {cvLabel && <span className="axis-watch__cv-badge" data-cv-status={job.cvStatus}>CV · {cvLabel}</span>}
+        {job.status === "ready" && <span>{job.candidates.length} findings</span>}
         {job.status === "failed" && <button onClick={onRetry} type="button">Retry</button>}
       </div>
       {job.error && <em>{job.error}</em>}
@@ -1471,6 +1703,132 @@ const styles = `
     font-size: 0.88rem;
     line-height: 1.4;
     margin: 0;
+  }
+
+  .axis-report__title-actions {
+    align-items: center;
+    display: flex;
+    gap: 0.55rem;
+  }
+
+  .axis-report__export {
+    background: rgba(20, 22, 16, 0.06);
+    border: 1px solid rgba(20, 22, 16, 0.14);
+    color: #141610;
+    font-size: 0.72rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    min-height: 1.9rem;
+    padding: 0 0.6rem;
+    text-transform: uppercase;
+  }
+
+  .axis-report__cv-row {
+    align-items: baseline;
+    border-top: 1px solid rgba(20, 22, 16, 0.08);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding-top: 0.65rem;
+  }
+
+  .axis-report__cv-stat {
+    color: rgba(20, 22, 16, 0.62);
+    font-size: 0.82rem;
+  }
+
+  /* CV Preview */
+
+  .axis-cv {
+    border-color: rgba(20, 22, 16, 0.12);
+  }
+
+  .axis-cv__provider {
+    color: rgba(20, 22, 16, 0.52);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .axis-cv__summary {
+    display: grid;
+    gap: 0;
+    margin: 0;
+  }
+
+  .axis-cv__summary div {
+    border-top: 1px solid rgba(20, 22, 16, 0.08);
+    display: grid;
+    gap: 0.15rem;
+    padding: 0.55rem 0;
+  }
+
+  .axis-cv__summary dt {
+    color: rgba(20, 22, 16, 0.52);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+
+  .axis-cv__summary dd {
+    margin: 0;
+  }
+
+  .axis-cv__preview {
+    border-top: 1px solid rgba(20, 22, 16, 0.08);
+    display: grid;
+    gap: 0.4rem;
+    padding-top: 0.7rem;
+  }
+
+  .axis-cv__canvas {
+    border-radius: 0.45rem;
+    display: block;
+    max-height: 24rem;
+    object-fit: contain;
+    width: 100%;
+  }
+
+  .axis-cv__frame-label {
+    color: rgba(20, 22, 16, 0.54);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .axis-cv__fallback {
+    color: rgba(20, 22, 16, 0.52);
+    font-size: 0.82rem;
+    margin: 0;
+  }
+
+  .axis-watch__cv-badge {
+    background: rgba(20, 22, 16, 0.06);
+    border: 1px solid rgba(20, 22, 16, 0.1);
+    border-radius: 999px;
+    color: rgba(20, 22, 16, 0.62);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.06em;
+    padding: 0.28rem 0.55rem;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .axis-watch__cv-badge[data-cv-status="ready"] {
+    background: rgba(72, 150, 48, 0.10);
+    border-color: rgba(72, 150, 48, 0.22);
+    color: #214a1a;
+  }
+
+  .axis-watch__cv-badge[data-cv-status="sampling"] {
+    background: rgba(183, 255, 92, 0.14);
+    border-color: rgba(20, 22, 16, 0.12);
+    color: #141610;
   }
 
   /* Check These */

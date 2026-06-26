@@ -238,8 +238,29 @@ async function handleDeepWatch(request: Request) {
     : undefined;
   const plan = compileWatchPlan(query, clipMetadata, routineContext);
 
+  // If CV pre-scan ran client-side, inject its summary into the compiled prompt.
+  const rawCvSummary = formData.get("cvSummary");
+  if (typeof rawCvSummary === "string" && rawCvSummary) {
+    try {
+      const cv = JSON.parse(rawCvSummary) as {
+        avgPeopleCount?: number;
+        framesWithPeople?: number;
+        maxPeopleCount?: number;
+        provider?: string;
+        totalFrames?: number;
+      };
+      if (typeof cv.maxPeopleCount === "number") {
+        plan.prompt +=
+          `\n\nCV Pre-scan Evidence:\n- People visible: max ${cv.maxPeopleCount} (avg ${cv.avgPeopleCount ?? 0})\n- Frames with people: ${cv.framesWithPeople ?? 0}/${cv.totalFrames ?? 0}\n- CV source: ${cv.provider ?? "unknown"}`;
+      }
+    } catch {
+      // ignore malformed cv summary
+    }
+  }
+
   console.log("[deep-watch] compiled", {
     clipName,
+    cvSummary: rawCvSummary ? "injected" : "none",
     watches: plan.watches,
     providerRoute: plan.providerRoute,
   });
