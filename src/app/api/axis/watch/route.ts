@@ -246,7 +246,7 @@ async function handleDeepWatch(request: Request) {
 
     const handle = await tasks.trigger<typeof import("../../../../../trigger/deep-watch").deepWatchClip>(
       "deep-watch-clip",
-      { clipName, query, tlTaskId } satisfies DeepWatchPayload,
+      { clipName, indexId, query, tlTaskId } satisfies DeepWatchPayload,
     );
 
     console.log("[deep-watch] triggered", { clipName, jobId: handle.id, tlTaskId });

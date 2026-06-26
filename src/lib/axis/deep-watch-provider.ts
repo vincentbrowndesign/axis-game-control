@@ -23,15 +23,25 @@ export type CandidateMoment = {
   title: string;
 };
 
+export type WatchFailureReason = "analyze_failed" | "parse_failed" | "task_failed" | "task_timeout";
+
+export const WATCH_FAILURE_MESSAGES: Record<WatchFailureReason, string> = {
+  analyze_failed: "The analysis could not complete. Try a more specific query.",
+  parse_failed: "No moments were found. Try a more specific query.",
+  task_failed: "The clip could not be processed. Try a different format.",
+  task_timeout: "Deep Watch is taking longer than expected. Try again with a shorter clip.",
+};
+
 export type WatchResponse = {
   candidates: Array<{ id: string; note: string; timestampSeconds: number; title: string }>;
   candidateMoments: CandidateMoment[];
   clipSummary: string;
+  failureReason?: WatchFailureReason;
   frameCount: number;
   limitations: string[];
   needsReviewCount: number;
   peopleSummary: string;
-  provider?: "fast_watch" | "deep_watch" | "fallback";
+  provider?: "deep_watch" | "deep_watch:twelvelabs" | "failed" | "fallback" | "fast_watch";
   suggestedNextQueries: string[];
 };
 
@@ -124,6 +134,17 @@ export async function uploadVideoToIndex(
   return data._id;
 }
 
+export async function deleteTwelveLabsIndex(apiKey: string, indexId: string): Promise<void> {
+  try {
+    await fetch(`${TWELVELABS_BASE}/indexes/${indexId}`, {
+      headers: { "x-api-key": apiKey },
+      method: "DELETE",
+    });
+  } catch {
+    // Non-fatal — cleanup is best-effort
+  }
+}
+
 export async function pollTaskUntilReady(apiKey: string, taskId: string): Promise<string> {
   for (let attempt = 0; attempt < TL_MAX_POLLS; attempt++) {
     await sleep(TL_POLL_INTERVAL_MS);
@@ -177,7 +198,11 @@ Rules: no identity claims, no score claims, no shot-result or rim claims.`;
     method: "POST",
   });
 
-  if (!response.ok || !response.body) return {};
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`TwelveLabs analyze failed: ${response.status} ${text.slice(0, 80)}`);
+  }
+  if (!response.body) return {};
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -263,7 +288,7 @@ export function buildTwelveLabsWatchResponse(
         : ["TwelveLabs analyzed the full uploaded clip. Each moment should be confirmed by a coach."],
     needsReviewCount: moments.filter((m) => m.needsReview).length,
     peopleSummary,
-    provider: "deep_watch",
+    provider: "deep_watch:twelvelabs",
     suggestedNextQueries: suggestedNextQueries.length > 0 ? suggestedNextQueries : createSuggestedNextQueries(query),
   };
 }

@@ -1,6 +1,12 @@
 import { runs } from "@trigger.dev/sdk/v3";
 import { NextResponse } from "next/server";
 
+import {
+  WATCH_FAILURE_MESSAGES,
+  type WatchFailureReason,
+  type WatchResponse,
+} from "../../../../../../lib/axis/deep-watch-provider";
+
 export const runtime = "nodejs";
 
 type WatchStatus = "failed" | "queued" | "ready" | "sampling" | "watching";
@@ -39,12 +45,21 @@ export async function GET(
     const run = await runs.retrieve(jobId);
     const status = mapTriggerStatus(run.status);
 
-    const payload: PollResponse = { status };
-
+    // Task may return provider:"failed" with a tagged reason even when Trigger marks it COMPLETED
     if (status === "ready" && run.output !== undefined) {
-      payload.result = run.output;
+      const result = run.output as WatchResponse;
+      if (result.provider === "failed") {
+        const reason = result.failureReason as WatchFailureReason | undefined;
+        const error =
+          reason && reason in WATCH_FAILURE_MESSAGES
+            ? WATCH_FAILURE_MESSAGES[reason]
+            : "Deep Watch could not process this clip.";
+        return NextResponse.json({ error, status: "failed" } satisfies PollResponse);
+      }
+      return NextResponse.json({ result, status: "ready" } satisfies PollResponse);
     }
 
+    const payload: PollResponse = { status };
     if (status === "failed") {
       payload.error = "Deep Watch could not process this clip.";
     }
