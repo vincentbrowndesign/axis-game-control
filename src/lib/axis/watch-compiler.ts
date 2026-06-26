@@ -332,11 +332,12 @@ export function watchToGroupLabel(watch: BasketballWatch): string {
 
 function buildIntent(watches: BasketballWatch[], query: string): string {
   const phrases = watches.map(watchToIntentPhrase);
-  const prefix = query.toLowerCase().includes("caption") ? "Axis is building a caption from" : "Axis is watching";
-  if (phrases.length === 0) return `${prefix} the clip.`;
-  if (phrases.length === 1) return `${prefix} for ${phrases[0]}.`;
+  const isCaption = query.toLowerCase().includes("caption");
+  const prefix = isCaption ? "Axis is building a caption from" : "Axis is watching for";
+  if (phrases.length === 0) return isCaption ? "Axis is building a caption from the clip." : "Axis is watching the clip.";
+  if (phrases.length === 1) return `${prefix} ${phrases[0]}.`;
   const last = phrases[phrases.length - 1];
-  return `${prefix} for ${phrases.slice(0, -1).join(", ")}, and ${last}.`;
+  return `${prefix} ${phrases.slice(0, -1).join(", ")}, and ${last}.`;
 }
 
 function watchToIntentPhrase(watch: BasketballWatch): string {
