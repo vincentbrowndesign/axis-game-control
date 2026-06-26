@@ -5,7 +5,12 @@ import { useEffect, useRef, useState } from "react";
 type WatchStatus = "queued" | "sampling" | "watching" | "ready" | "failed";
 
 type WatchCandidate = {
+  confidence: number;
+  evidenceBucket?: "check_this" | "hidden_low_value" | "not_enough_evidence" | "report_ready";
+  evidenceScore?: number;
   id: string;
+  labels: string[];
+  needsReview: boolean;
   note: string;
   timestampSeconds: number;
   title: string;
@@ -21,13 +26,16 @@ type WatchJob = {
   acceptedCount: number;
   candidates: WatchCandidate[];
   clipName: string;
+  clipSummary?: string;
   compiledIntent?: string;
   createdAt: string;
   error?: string;
   id: string;
+  limitations?: string[];
   query: string;
   sampledFrameCount: number;
   status: WatchStatus;
+  suggestedNextQueries?: string[];
   triggerRunId?: string;
   watchGroups?: WatchGroup[];
 };
@@ -141,13 +149,24 @@ export function AxisWatchRoot() {
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
-      const payload = (await response.json()) as { candidates?: Array<Omit<WatchCandidate, "status">>; error?: string };
+      const payload = (await response.json()) as { candidates?: Array<{ id: string; note: string; timestampSeconds: number; title: string }>; error?: string };
       if (!response.ok || !payload.candidates) {
         updateJob(jobId, { error: payload.error || "Axis could not watch this clip.", status: "failed" });
         return;
       }
       updateJob(jobId, {
-        candidates: payload.candidates.map((candidate) => ({ ...candidate, status: "pending" })),
+        candidates: payload.candidates.map((c) => ({
+          confidence: 0.50,
+          evidenceBucket: "check_this" as const,
+          evidenceScore: 0.20,
+          id: c.id,
+          labels: [],
+          needsReview: true,
+          note: c.note,
+          status: "pending" as const,
+          timestampSeconds: c.timestampSeconds,
+          title: c.title,
+        })),
         status: "ready",
       });
     } catch {
@@ -172,14 +191,29 @@ export function AxisWatchRoot() {
       form.append("mode", "deep_watch");
 
       const response = await fetch("/api/axis/watch", { body: form, method: "POST" });
-      const payload = (await response.json()) as {
-        candidates?: Array<Omit<WatchCandidate, "status">>;
+      type DeepWatchPayloadResponse = {
+        candidateMoments?: Array<{
+          confidence: number;
+          evidenceBucket?: WatchCandidate["evidenceBucket"];
+          evidenceScore?: number;
+          id: string;
+          labels: string[];
+          needsReview: boolean;
+          note: string;
+          timestampSeconds: number;
+          title: string;
+        }>;
+        candidates?: Array<{ id: string; note: string; timestampSeconds: number; title: string }>;
+        clipSummary?: string;
         compiledIntent?: string;
         error?: string;
         jobId?: string;
+        limitations?: string[];
         status?: string;
+        suggestedNextQueries?: string[];
         watchGroups?: WatchGroup[];
       };
+      const payload = (await response.json()) as DeepWatchPayloadResponse;
 
       if (!response.ok) {
         updateJob(jobId, { error: payload.error || "Deep Watch could not start.", status: "failed" });
@@ -187,11 +221,31 @@ export function AxisWatchRoot() {
       }
 
       // Synchronous fallback (no API key) — route returns candidates directly.
-      if (payload.candidates) {
+      if (payload.candidates || payload.candidateMoments) {
+        const moments = payload.candidateMoments ?? payload.candidates?.map((c) => ({
+          ...c, confidence: 0.50, evidenceBucket: "check_this" as const, evidenceScore: 0.20,
+          labels: [], needsReview: true,
+        })) ?? [];
         updateJob(jobId, {
-          candidates: payload.candidates.map((c) => ({ ...c, status: "pending" as const })),
+          candidates: moments.map((c) => ({
+            confidence: c.confidence,
+            evidenceBucket: c.evidenceBucket ?? "check_this",
+            evidenceScore: c.evidenceScore ?? 0.20,
+            id: c.id,
+            labels: c.labels,
+            needsReview: c.needsReview,
+            note: c.note,
+            timestampSeconds: c.timestampSeconds,
+            title: c.title,
+            status: c.evidenceBucket === "report_ready" ? "accepted"
+              : c.evidenceBucket === "hidden_low_value" || c.evidenceBucket === "not_enough_evidence" ? "rejected"
+              : "pending" as const,
+          })),
+          clipSummary: payload.clipSummary,
           compiledIntent: payload.compiledIntent,
+          limitations: payload.limitations,
           status: "ready",
+          suggestedNextQueries: payload.suggestedNextQueries,
           watchGroups: payload.watchGroups,
         });
         return;
@@ -226,23 +280,53 @@ export function AxisWatchRoot() {
   ) {
     try {
       const response = await fetch(`/api/axis/watch/status/${triggerRunId}`);
-      const poll = (await response.json()) as {
+      type PollResponse = {
         error?: string;
         result?: {
-          candidates?: Array<Omit<WatchCandidate, "status">>;
+          candidateMoments?: Array<{
+            confidence: number;
+            evidenceBucket?: WatchCandidate["evidenceBucket"];
+            evidenceScore?: number;
+            id: string;
+            labels: string[];
+            needsReview: boolean;
+            note: string;
+            timestampSeconds: number;
+            title: string;
+          }>;
+          clipSummary?: string;
           compiledIntent?: string;
+          limitations?: string[];
+          suggestedNextQueries?: string[];
           watchGroups?: WatchGroup[];
         };
         status: WatchStatus;
       };
+      const poll = (await response.json()) as PollResponse;
 
-      if (poll.status === "ready" && poll.result?.candidates) {
+      if (poll.status === "ready" && poll.result?.candidateMoments) {
         clearInterval(intervalId);
         pollIntervalsRef.current.delete(jobId);
         updateJob(jobId, {
-          candidates: poll.result.candidates.map((c) => ({ ...c, status: "pending" as const })),
+          candidates: poll.result.candidateMoments.map((c) => ({
+            confidence: c.confidence,
+            evidenceBucket: c.evidenceBucket ?? "check_this",
+            evidenceScore: c.evidenceScore ?? 0.20,
+            id: c.id,
+            labels: c.labels,
+            needsReview: c.needsReview,
+            note: c.note,
+            timestampSeconds: c.timestampSeconds,
+            title: c.title,
+            status: c.evidenceBucket === "report_ready" ? "accepted"
+              : c.evidenceBucket === "hidden_low_value" || c.evidenceBucket === "not_enough_evidence" ? "rejected"
+              : "pending" as const,
+          })),
+          clipSummary: poll.result.clipSummary,
           compiledIntent: poll.result.compiledIntent,
+          limitations: poll.result.limitations,
           status: "ready",
+          suggestedNextQueries: poll.result.suggestedNextQueries,
           watchGroups: poll.result.watchGroups,
         });
         return;
@@ -287,7 +371,6 @@ export function AxisWatchRoot() {
 
   const latestReadyJob = jobs.find((job) => job.status === "ready");
   const activeJob = jobs[0];
-  const acceptedCandidates = latestReadyJob?.candidates.filter((candidate) => candidate.status === "accepted") ?? [];
 
   return (
     <main className="axis-watch" aria-labelledby="axis-watch-title">
@@ -355,7 +438,7 @@ export function AxisWatchRoot() {
                   </button>
                   <a href="/axis/routine" onClick={() => setToolMenuOpen(false)}>Routine Context</a>
                   <a href="#watch-queue" onClick={() => setToolMenuOpen(false)}>Clips</a>
-                  <a href="#report-preview" onClick={() => setToolMenuOpen(false)}>Reports</a>
+                  <a href="#axis-report" onClick={() => setToolMenuOpen(false)}>Report</a>
                 </div>
               )}
             </div>
@@ -386,35 +469,19 @@ export function AxisWatchRoot() {
         {activeJob && <ExecutionCard job={activeJob} onRetry={() => void watchWithAxis()} />}
 
         {latestReadyJob && (
-          <section className="axis-watch__card axis-watch__completion" aria-labelledby="axis-completion-title">
-            <div className="axis-watch__section-title">
-              <h2 id="axis-completion-title">Ready for review</h2>
-              <span>{latestReadyJob.candidates.length} moment{latestReadyJob.candidates.length === 1 ? "" : "s"} to review</span>
-            </div>
-            <dl className="axis-watch__result-grid">
-              <div>
-                <dt>Axis watched for</dt>
-                <dd>{latestReadyJob.compiledIntent ?? latestReadyJob.query}</dd>
-              </div>
-              <div>
-                <dt>Clip</dt>
-                <dd>{latestReadyJob.clipName}</dd>
-              </div>
-              <div>
-                <dt>Moments to review</dt>
-                <dd>{latestReadyJob.candidates.length}</dd>
-              </div>
-            </dl>
-            <div className="axis-watch__limitations">
-              <span>Limitations</span>
-              <p>Axis is finding moments from the clip and your question. It is not claiming identity, stats, shots, rim, or ball truth.</p>
-            </div>
-            <div className="axis-watch__next-actions" aria-label="Next actions">
-              <a href="#candidate-review">Review</a>
-              <a href="#clip-question">Ask about this clip…</a>
-              <a href="#report-preview">Make report</a>
-            </div>
-          </section>
+          <AxisReport
+            job={latestReadyJob}
+            onIncludeInReport={(id) => updateCandidate(latestReadyJob.id, id, { status: "accepted" })}
+          />
+        )}
+
+        {latestReadyJob && (
+          <CheckThese
+            candidates={latestReadyJob.candidates}
+            jobId={latestReadyJob.id}
+            onInclude={(id) => updateCandidate(latestReadyJob.id, id, { status: "accepted" })}
+            onSkip={(id) => updateCandidate(latestReadyJob.id, id, { status: "rejected" })}
+          />
         )}
 
         <section className="axis-watch__card" aria-labelledby="axis-watch-queue-title" id="watch-queue">
@@ -437,9 +504,6 @@ export function AxisWatchRoot() {
                 <p>{job.compiledIntent ?? job.query}</p>
                 <small>{job.sampledFrameCount > 0 ? `${job.sampledFrameCount} frames checked` : "Full clip"}</small>
                 {job.error && <em>{job.error}</em>}
-                {job.status === "ready" && (
-                  <CandidateReview candidates={job.candidates} jobId={job.id} onUpdateCandidate={updateCandidate} sectionId={job.id === latestReadyJob?.id ? "candidate-review" : undefined} watchGroups={job.watchGroups} />
-                )}
               </article>
             ))}
           </div>
@@ -454,24 +518,7 @@ export function AxisWatchRoot() {
           </section>
         )}
 
-        <section className="axis-watch__card" aria-labelledby="axis-report-preview-title" id="report-preview">
-          <div className="axis-watch__section-title axis-watch__report-cover">
-            <h2 id="axis-report-preview-title">Report</h2>
-            <span>Accepted moments only.</span>
-          </div>
-          {acceptedCandidates.length === 0 ? (
-            <p>No accepted moments yet.</p>
-          ) : (
-            <ul className="axis-watch__report-list">
-              {acceptedCandidates.map((candidate) => (
-                <li key={candidate.id}>
-                  <strong>{candidate.title}</strong>
-                  <span>{formatTimestamp(candidate.timestampSeconds)} - {candidate.note}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {latestReadyJob && <ClipData job={latestReadyJob} />}
       </section>
 
       <style jsx>{styles}</style>
@@ -479,88 +526,155 @@ export function AxisWatchRoot() {
   );
 }
 
-function CandidateReview({
-  candidates,
-  jobId,
-  onUpdateCandidate,
-  sectionId,
-  watchGroups,
+function AxisReport({
+  job,
+  onIncludeInReport,
 }: {
-  candidates: WatchCandidate[];
-  jobId: string;
-  onUpdateCandidate: (jobId: string, candidateId: string, patch: Partial<WatchCandidate>) => void;
-  sectionId?: string;
-  watchGroups?: WatchGroup[];
+  job: WatchJob;
+  onIncludeInReport: (id: string) => void;
 }) {
-  const candidateById = new Map(candidates.map((c) => [c.id, c]));
-
-  // Render grouped when groups are available, flat otherwise
-  if (watchGroups && watchGroups.length > 0) {
-    const groupedIds = new Set(watchGroups.flatMap((g) => g.candidateIds));
-    const ungrouped = candidates.filter((c) => !groupedIds.has(c.id));
-
-    return (
-      <div className="axis-watch__candidates" id={sectionId}>
-        {watchGroups.map((group) => {
-          const groupCandidates = group.candidateIds.map((id) => candidateById.get(id)).filter(Boolean) as WatchCandidate[];
-          if (groupCandidates.length === 0) return null;
-          return (
-            <div key={group.label}>
-              <p className="axis-watch__group-label">{group.label} <span>({groupCandidates.length})</span></p>
-              {groupCandidates.map((candidate) => (
-                <CandidateCard candidate={candidate} jobId={jobId} key={candidate.id} onUpdateCandidate={onUpdateCandidate} />
-              ))}
-            </div>
-          );
-        })}
-        {ungrouped.map((candidate) => (
-          <CandidateCard candidate={candidate} jobId={jobId} key={candidate.id} onUpdateCandidate={onUpdateCandidate} />
-        ))}
-      </div>
-    );
-  }
+  void onIncludeInReport; // available for future promoted-finding UI
+  const reportFindings = job.candidates.filter((c) => c.status === "accepted");
+  const sorted = [...reportFindings].sort((a, b) => (b.evidenceScore ?? 0) - (a.evidenceScore ?? 0));
+  const bestMoment = sorted[0];
+  const biggestIssue = reportFindings.find(
+    (c) => c.labels.includes("breakdown") || c.labels.includes("spacing_issue"),
+  );
+  const nextAction = job.suggestedNextQueries?.[0];
 
   return (
-    <div className="axis-watch__candidates" id={sectionId}>
-      {candidates.map((candidate) => (
-        <CandidateCard candidate={candidate} jobId={jobId} key={candidate.id} onUpdateCandidate={onUpdateCandidate} />
-      ))}
-    </div>
+    <section className="axis-watch__card axis-report" aria-labelledby="axis-report-title" id="axis-report">
+      <div className="axis-watch__section-title">
+        <h2 id="axis-report-title">Axis Report</h2>
+        <span>{reportFindings.length} finding{reportFindings.length === 1 ? "" : "s"}</span>
+      </div>
+
+      <p className="axis-report__intent">{job.compiledIntent ?? job.query}</p>
+
+      {reportFindings.length === 0 ? (
+        <p>Axis found moments worth checking — none cleared automatically. Review below.</p>
+      ) : (
+        <>
+          <div className="axis-report__section">
+            <span className="axis-report__label">Key findings</span>
+            <ul className="axis-report__findings">
+              {reportFindings.map((f) => (
+                <li key={f.id}>
+                  <strong>[{formatTimestamp(f.timestampSeconds)}] {f.title}</strong>
+                  <span>{f.note}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {bestMoment && (
+            <div className="axis-report__section">
+              <span className="axis-report__label">Best moment</span>
+              <div className="axis-report__highlight">
+                <span>{formatTimestamp(bestMoment.timestampSeconds)}</span>
+                <strong>{bestMoment.title}</strong>
+                <p>{bestMoment.note}</p>
+              </div>
+            </div>
+          )}
+
+          {biggestIssue && biggestIssue.id !== bestMoment?.id && (
+            <div className="axis-report__section">
+              <span className="axis-report__label">Biggest issue</span>
+              <div className="axis-report__highlight">
+                <span>{formatTimestamp(biggestIssue.timestampSeconds)}</span>
+                <strong>{biggestIssue.title}</strong>
+                <p>{biggestIssue.note}</p>
+              </div>
+            </div>
+          )}
+
+          {nextAction && (
+            <div className="axis-report__section">
+              <span className="axis-report__label">Next</span>
+              <p className="axis-report__next-action">{nextAction}</p>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
-function CandidateCard({
-  candidate,
-  jobId,
-  onUpdateCandidate,
+function CheckThese({
+  candidates,
+  onInclude,
+  onSkip,
 }: {
-  candidate: WatchCandidate;
+  candidates: WatchCandidate[];
   jobId: string;
-  onUpdateCandidate: (jobId: string, candidateId: string, patch: Partial<WatchCandidate>) => void;
+  onInclude: (id: string) => void;
+  onSkip: (id: string) => void;
 }) {
+  const checkItems = candidates.filter((c) => c.evidenceBucket === "check_this" && c.status === "pending");
+  if (checkItems.length === 0) return null;
+
   return (
-    <article data-review-status={candidate.status} key={candidate.id}>
-      <div className="axis-watch__candidate-time">
-        <i aria-hidden="true" />
-        <span>{formatTimestamp(candidate.timestampSeconds)}</span>
+    <section className="axis-watch__card axis-check" aria-labelledby="axis-check-title" id="check-these">
+      <div className="axis-watch__section-title">
+        <h2 id="axis-check-title">Check These</h2>
+        <span>{checkItems.length} to verify</span>
       </div>
-      <input
-        aria-label="Moment title"
-        onChange={(event) => onUpdateCandidate(jobId, candidate.id, { title: event.target.value })}
-        value={candidate.title}
-      />
-      <textarea
-        aria-label="Moment note"
-        onChange={(event) => onUpdateCandidate(jobId, candidate.id, { note: event.target.value })}
-        rows={2}
-        value={candidate.note}
-      />
-      <div className="axis-watch__candidate-actions">
-        <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "accepted" })} type="button">Accept</button>
-        <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "rejected" })} type="button">Reject</button>
-        <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "pending" })} type="button">Edit</button>
+      <div className="axis-check__list">
+        {checkItems.map((c) => (
+          <article className="axis-check__item" key={c.id}>
+            <div className="axis-watch__candidate-time">
+              <i aria-hidden="true" />
+              <span>{formatTimestamp(c.timestampSeconds)}</span>
+            </div>
+            <strong>{c.title}</strong>
+            <p>{c.note}</p>
+            <div className="axis-check__actions">
+              <button onClick={() => onInclude(c.id)} type="button">Include in Report</button>
+              <button onClick={() => onSkip(c.id)} type="button">Skip</button>
+            </div>
+          </article>
+        ))}
       </div>
-    </article>
+    </section>
+  );
+}
+
+function ClipData({ job }: { job: WatchJob }) {
+  const notEnoughEvidence = job.limitations ?? [];
+  const allFindings = job.candidates;
+
+  return (
+    <details className="axis-watch__card axis-clip-data">
+      <summary>
+        <span>Clip Data</span>
+        <span className="axis-clip-data__meta">{allFindings.length} finding{allFindings.length === 1 ? "" : "s"} · {job.clipName}</span>
+      </summary>
+      {notEnoughEvidence.length > 0 && (
+        <div className="axis-clip-data__section">
+          <span className="axis-report__label">Not enough evidence</span>
+          <ul className="axis-clip-data__limits">
+            {notEnoughEvidence.map((l, i) => <li key={i}>{l}</li>)}
+          </ul>
+        </div>
+      )}
+      <div className="axis-watch__candidates">
+        {allFindings.length === 0 && <p>No clip data available.</p>}
+        {allFindings.map((f) => (
+          <article data-bucket={f.evidenceBucket} data-review-status={f.status} key={f.id}>
+            <div className="axis-watch__candidate-time">
+              <i aria-hidden="true" />
+              <span>{formatTimestamp(f.timestampSeconds)}</span>
+            </div>
+            <strong>{f.title}</strong>
+            <p>{f.note}</p>
+            {f.labels.length > 0 && (
+              <span className="axis-clip-data__labels">{f.labels.join(", ")}</span>
+            )}
+          </article>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -607,7 +721,7 @@ function getStatusLabel(status: WatchStatus) {
   const labels: Record<WatchStatus, string> = {
     failed: "Failed",
     queued: "Waiting",
-    ready: "Needs review",
+    ready: "Ready",
     sampling: "Uploading",
     watching: "Processing",
   };
@@ -1263,60 +1377,242 @@ const styles = `
     padding: 0;
   }
 
-  .axis-watch__completion {
-    border-color: rgba(72, 150, 48, 0.18);
+  /* Axis Report */
+
+  .axis-report {
+    border-color: rgba(72, 150, 48, 0.22);
   }
 
-  .axis-watch__completion::before {
-    background: linear-gradient(90deg, rgba(72, 150, 48, 0.52), transparent 65%);
+  .axis-report::before {
+    background: linear-gradient(90deg, rgba(72, 150, 48, 0.55), transparent 65%);
     content: "";
     height: 2px;
     inset: 0 0 auto;
     position: absolute;
   }
 
-  .axis-watch__result-grid {
-    display: grid;
-    gap: 0;
-    margin: 0;
+  .axis-report__intent {
+    color: rgba(20, 22, 16, 0.68);
+    font-size: 0.9rem;
+    line-height: 1.45;
   }
 
-  .axis-watch__result-grid div {
+  .axis-report__section {
     border-top: 1px solid rgba(20, 22, 16, 0.08);
     display: grid;
-    gap: 0.2rem;
-    margin: 0;
-    padding: 0.7rem 0;
+    gap: 0.45rem;
+    padding-top: 0.72rem;
   }
 
-  .axis-watch__limitations {
-    border-top: 1px solid rgba(20, 22, 16, 0.08);
-    display: grid;
-    gap: 0.25rem;
-    padding-top: 0.75rem;
-  }
-
-  .axis-watch__result-grid dt,
-  .axis-watch__limitations span {
+  .axis-report__label {
     color: rgba(20, 22, 16, 0.54);
     font-size: 0.68rem;
     font-weight: 950;
     letter-spacing: 0.08em;
-    margin: 0;
     text-transform: uppercase;
   }
 
-  .axis-watch__result-grid dd,
-  .axis-watch__limitations p {
+  .axis-report__findings {
+    display: grid;
+    gap: 0.52rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .axis-report__findings li {
+    border-left: 2.5px solid rgba(72, 150, 48, 0.45);
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.18rem 0 0.18rem 0.65rem;
+  }
+
+  .axis-report__findings li strong {
+    font-size: 0.9rem;
+  }
+
+  .axis-report__findings li span {
+    color: rgba(20, 22, 16, 0.62);
+    font-size: 0.82rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .axis-report__highlight {
+    background: rgba(72, 150, 48, 0.055);
+    border: 1px solid rgba(72, 150, 48, 0.15);
+    border-radius: 0.55rem;
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.72rem;
+  }
+
+  .axis-report__highlight span {
+    color: rgba(20, 22, 16, 0.52);
+    font-size: 0.65rem;
+    font-weight: 950;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .axis-report__highlight strong {
+    font-size: 0.94rem;
+  }
+
+  .axis-report__highlight p {
+    color: rgba(20, 22, 16, 0.68);
+    font-size: 0.85rem;
     margin: 0;
   }
 
-  .axis-watch__next-actions a {
+  .axis-report__next-action {
+    color: rgba(20, 22, 16, 0.72);
+    font-size: 0.88rem;
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  /* Check These */
+
+  .axis-check__list {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .axis-check__item {
+    background: rgba(20, 22, 16, 0.025);
+    border: 1px solid rgba(20, 22, 16, 0.1);
+    border-radius: 0.6rem;
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.85rem;
+  }
+
+  .axis-check__item strong {
+    font-size: 0.92rem;
+  }
+
+  .axis-check__item > p {
+    color: rgba(20, 22, 16, 0.62);
+    font-size: 0.82rem;
+    margin: 0;
+  }
+
+  .axis-check__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .axis-check__actions button {
+    background: rgba(20, 22, 16, 0.06);
+    border: 1px solid rgba(20, 22, 16, 0.14);
+    color: #141610;
+    font-size: 0.8rem;
+    min-height: 2.4rem;
+  }
+
+  .axis-check__actions button:first-child {
+    background: rgba(72, 150, 48, 0.10);
+    border-color: rgba(72, 150, 48, 0.26);
+    color: #214a1a;
+  }
+
+  /* Clip Data */
+
+  .axis-clip-data summary {
     align-items: center;
-    background: #141610;
-    border-color: #141610;
-    color: #fffdf8;
-    display: inline-flex;
+    cursor: pointer;
+    display: flex;
+    gap: 0.65rem;
+    justify-content: space-between;
+    list-style: none;
+    padding: 0;
+  }
+
+  .axis-clip-data summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .axis-clip-data summary > span:first-child {
+    font-size: 1.05rem;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+
+  .axis-clip-data__meta {
+    color: rgba(20, 22, 16, 0.52);
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .axis-clip-data[open] summary {
+    margin-bottom: 0.75rem;
+  }
+
+  .axis-clip-data__section {
+    border-top: 1px solid rgba(20, 22, 16, 0.08);
+    display: grid;
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+    padding-top: 0.7rem;
+  }
+
+  .axis-clip-data__limits {
+    color: rgba(20, 22, 16, 0.66);
+    display: grid;
+    font-size: 0.84rem;
+    gap: 0.3rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .axis-clip-data .axis-watch__candidates article {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(20, 22, 16, 0.06);
+    border-radius: 0;
+    box-shadow: none;
+    gap: 0.3rem;
+    padding: 0.6rem 0 0.6rem 0.65rem;
+  }
+
+  .axis-clip-data .axis-watch__candidates article:last-child {
+    border-bottom: none;
+  }
+
+  .axis-clip-data .axis-watch__candidates article strong {
+    font-size: 0.88rem;
+  }
+
+  .axis-clip-data .axis-watch__candidates article > p {
+    color: rgba(20, 22, 16, 0.62);
+    font-size: 0.8rem;
+    margin: 0;
+  }
+
+  .axis-clip-data__labels {
+    color: rgba(20, 22, 16, 0.4);
+    font-size: 0.66rem;
+    font-weight: 850;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .axis-watch__report-cover {
+    background: transparent;
+    border-radius: 0;
+    color: #141610;
+    margin: 0;
+    padding: 0;
+  }
+
+  .axis-watch__report-cover span {
+    color: rgba(20, 22, 16, 0.58);
   }
 
   .axis-watch__candidates {

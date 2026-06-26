@@ -2,6 +2,10 @@
 // Consumed by trigger/deep-watch.ts (polling + analysis) and
 // src/app/api/axis/watch/route.ts (index creation + video upload).
 
+import { type EvidenceBucket, scoreEvidence } from "./evidence-scorer";
+
+export type { EvidenceBucket };
+
 export type CandidateLabel =
   | "person_visible"
   | "group_action"
@@ -15,6 +19,8 @@ export type CandidateLabel =
 
 export type CandidateMoment = {
   confidence: number;
+  evidenceBucket?: EvidenceBucket;
+  evidenceScore?: number;
   id: string;
   labels: CandidateLabel[];
   needsReview: boolean;
@@ -355,11 +361,15 @@ function normalizeTwelveLabsChapter(chapter: TwelveLabsChapter, index: number, q
 
   const confidence = relevanceRatio >= 0.5 ? 0.74 : relevanceRatio > 0 ? 0.58 : 0.44;
   const needsReview = confidence < LOW_CONFIDENCE_THRESHOLD;
+  const labels = deriveLabelsFromText(combinedText);
+  const { bucket, evidenceScore } = scoreEvidence(labels, confidence);
 
   return {
     confidence,
+    evidenceBucket: bucket,
+    evidenceScore,
     id: `candidate-${index + 1}`,
-    labels: deriveLabelsFromText(combinedText),
+    labels,
     needsReview,
     note: (chapter.summary || "Review this segment for coaching cues.").slice(0, 280),
     timestampSeconds: Number(chapter.start.toFixed(1)),
