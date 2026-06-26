@@ -7,10 +7,13 @@ type WatchStatus = "queued" | "sampling" | "watching" | "ready" | "failed";
 
 type CvDetection = {
   bbox: [number, number, number, number]; // normalized [x1, y1, x2, y2]
+  class?: string;
   confidence: number;
-  kind: "ball" | "person";
-  label: string;
+  kind: "ball" | "object" | "person" | "rim";
+  label?: string;
 };
+
+type CvContextStatus = "connected" | "failed" | "not_configured";
 
 type CvContext = {
   peakFrame?: {
@@ -21,9 +24,13 @@ type CvContext = {
   };
   summary: {
     avgPeopleCount: number;
+    ballDetected?: boolean;
+    framesWithDetections?: number;
     framesWithPeople: number;
     maxPeopleCount: number;
-    provider: "fallback" | "roboflow" | "yolo";
+    provider: string;
+    status: CvContextStatus;
+    totalDetections?: number;
     totalFrames: number;
   };
 };
@@ -215,10 +222,10 @@ export function AxisWatchRoot() {
     updateJob(jobId, { cvStatus: "sampling" });
 
     try {
-      // Sample 1 frame/second, cap at 25 frames — fast enough for CV and stays under route limit
+      // 1 frame/sec, cap at 25 — enough for CV pre-scan without dominating upload time
       const frames = await sampleVideoFrames(clipUrl, 25);
 
-      const response = await fetch("/api/axis/watch/cv-context", {
+      const response = await fetch("/api/axis/cv/detect", {
         body: JSON.stringify({ frames }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
@@ -232,22 +239,49 @@ export function AxisWatchRoot() {
       const data = (await response.json()) as {
         frameResults?: Array<{
           detections: CvDetection[];
-          needsReview: boolean;
+          error?: string;
           peopleCount: number;
           timestampSeconds: number;
         }>;
+        provider?: string;
+        status?: CvContextStatus;
         summary?: CvContext["summary"];
       };
 
       const frameResults = data.frameResults ?? [];
-      const summary = data.summary;
+      const status = data.status ?? "failed";
+      const provider = data.provider ?? "unknown";
 
-      if (!summary) {
-        updateJob(jobId, { cvStatus: "failed" });
-        return null;
-      }
+      // Build summary from raw frame results so we're not relying on server-computed shape
+      const peopleCounts = frameResults.map((f) => f.peopleCount);
+      const maxPeopleCount = peopleCounts.length > 0 ? Math.max(...peopleCounts) : 0;
+      const framesWithPeople = peopleCounts.filter((n) => n > 0).length;
+      const avgPeopleCount = Number(
+        (peopleCounts.length > 0
+          ? peopleCounts.reduce((s, n) => s + n, 0) / peopleCounts.length
+          : 0
+        ).toFixed(1),
+      );
+      const allDetections = frameResults.flatMap((f) => f.detections);
+      const ballDetected = allDetections.some((d) => d.kind === "ball");
 
-      // Find the frame with the most people for the canvas overlay preview
+      const summary: CvContext["summary"] = data.summary ?? {
+        avgPeopleCount,
+        ballDetected,
+        framesWithDetections: frameResults.filter((f) => f.detections.length > 0).length,
+        framesWithPeople,
+        maxPeopleCount,
+        provider,
+        status,
+        totalDetections: allDetections.length,
+        totalFrames: frameResults.length,
+      };
+
+      // Ensure summary has the status/provider from the route response
+      summary.status = status;
+      summary.provider = provider;
+
+      // Peak frame: most people — used for overlay canvas
       const peakResult = frameResults.reduce<(typeof frameResults)[0] | null>(
         (best, curr) => (curr.peopleCount > (best?.peopleCount ?? 0) ? curr : best),
         null,
@@ -255,7 +289,6 @@ export function AxisWatchRoot() {
 
       let peakFrame: CvContext["peakFrame"];
       if (peakResult && peakResult.peopleCount > 0) {
-        // Match back to the local frame to retrieve its imageDataUrl
         const localFrame = frames.find(
           (f) => Math.abs(f.timestampSeconds - peakResult.timestampSeconds) < 0.5,
         );
@@ -269,6 +302,8 @@ export function AxisWatchRoot() {
         }
       }
 
+      // status === "not_configured" or "failed" still reaches "ready" so the UI
+      // can show an honest message rather than silently disappearing.
       updateJob(jobId, { cvContext: { peakFrame, summary }, cvStatus: "ready" });
       return summary;
     } catch {
@@ -716,9 +751,10 @@ function CvPreview({ cvContext }: { cvContext: CvContext | undefined }) {
         ctx.strokeRect(px, py, pw, ph);
 
         ctx.fillStyle = det.kind === "person" ? "#b7ff5c" : "#ff9800";
-        ctx.fillRect(px, py - 16, ctx.measureText(det.label).width + 8, 16);
+        const detLabel = det.class ?? det.label ?? det.kind;
+        ctx.fillRect(px, py - 16, ctx.measureText(detLabel).width + 8, 16);
         ctx.fillStyle = "#141610";
-        ctx.fillText(det.label, px + 4, py - 4);
+        ctx.fillText(detLabel, px + 4, py - 4);
       }
     };
   }, [cvContext?.peakFrame]);
@@ -754,8 +790,11 @@ function CvPreview({ cvContext }: { cvContext: CvContext | undefined }) {
         </div>
       )}
 
-      {summary.provider === "fallback" && (
-        <p className="axis-cv__fallback">CV detector offline. People counts are unavailable for this clip.</p>
+      {summary.status === "failed" && (
+        <p className="axis-cv__fallback">CV provider did not respond. People counts are unavailable for this clip.</p>
+      )}
+      {summary.status === "not_configured" && (
+        <p className="axis-cv__fallback">No CV provider configured. Set AXIS_VISION_DETECTOR_URL or ROBOFLOW_API_KEY to enable detection.</p>
       )}
     </section>
   );
@@ -963,13 +1002,16 @@ function ExecutionCard({ job, onRetry }: { job: WatchJob; onRetry: () => void })
     : "Full clip";
 
   const cvReady = job.cvStatus === "ready";
-  const cvOffline = cvReady && job.cvContext?.summary.provider === "fallback";
-  const cvLabel =
-    job.cvStatus === "sampling" ? "Scanning…"
-    : cvOffline ? "CV offline"
-    : cvReady ? `${job.cvContext?.summary.maxPeopleCount ?? 0} people`
-    : job.cvStatus === "failed" ? "CV unavailable"
-    : null;
+  const cvStatus = job.cvContext?.summary.status;
+  const cvLabel = (() => {
+    if (job.cvStatus === "sampling") return "Scanning…";
+    if (job.cvStatus === "failed") return "CV unavailable";
+    if (!cvReady) return null;
+    if (cvStatus === "not_configured") return null; // hide badge entirely
+    if (cvStatus === "failed") return "CV unavailable";
+    // connected: show actual count (even 0 — means provider answered with no detections)
+    return `${job.cvContext?.summary.maxPeopleCount ?? 0} people`;
+  })();
 
   return (
     <section className="axis-watch__card axis-watch__execution" aria-labelledby="axis-execution-title" data-status={job.status}>
@@ -1037,15 +1079,18 @@ function computeNextAction(job: WatchJob): NextAction | null {
     (c) => c.evidenceBucket === "not_enough_evidence" && c.status !== "rejected",
   );
 
-  // 1. CV offline → connect
+  // 1. CV failed or not configured → surface the issue
+  const cvCtxStatus = job.cvContext?.summary.status;
   if (
-    (job.cvStatus === "failed" || job.cvContext?.summary.provider === "fallback") &&
+    (job.cvStatus === "failed" || cvCtxStatus === "failed" || cvCtxStatus === "not_configured") &&
     job.cvStatus !== "sampling"
   ) {
     return {
       cta: "Check CV Status",
       description:
-        "CV detection returned no evidence. Verify the detector and Roboflow project are reachable.",
+        cvCtxStatus === "not_configured"
+          ? "No CV provider configured. Set AXIS_VISION_DETECTOR_URL or ROBOFLOW_API_KEY to enable detection."
+          : "CV provider did not respond. Check that the detector is running and reachable.",
       kind: "connect_cv",
     };
   }
@@ -1296,7 +1341,7 @@ function buildReportLines(job: WatchJob): string[] {
     `Axis watched for: ${job.compiledIntent ?? job.query}`,
   ];
 
-  if (cv && cv.provider !== "fallback") {
+  if (cv && cv.status === "connected") {
     lines.push("", "CV EVIDENCE");
     lines.push(`Provider: ${cv.provider}`);
     lines.push(`People visible: ${cv.maxPeopleCount} max (avg ${cv.avgPeopleCount})`);
