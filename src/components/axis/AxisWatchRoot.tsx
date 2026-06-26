@@ -153,6 +153,8 @@ export function AxisWatchRoot() {
 
   return (
     <main className="axis-watch" aria-labelledby="axis-watch-title">
+      <div className="axis-signal axis-signal--grid" aria-hidden="true" />
+      <div className="axis-signal axis-signal--scan" aria-hidden="true" />
       <section className="axis-watch__shell">
         <header className="axis-watch__header">
           <p>AXIS</p>
@@ -175,10 +177,18 @@ export function AxisWatchRoot() {
             {recordingState === "recording" && <button onClick={stopRecording} type="button">Stop Recording</button>}
             {recordingState !== "idle" && <button onClick={stopRecordingPreview} type="button">Cancel</button>}
           </div>
-          <video className="axis-watch__video" controls muted playsInline ref={videoPreviewRef} src={clipUrl || undefined} />
+          <div className="axis-watch__video-shell">
+            <video className="axis-watch__video" controls muted playsInline ref={videoPreviewRef} src={clipUrl || undefined} />
+            <div className="axis-watch__video-overlay" aria-hidden="true">
+              <span>00:00:00</span>
+              <i />
+              <span>SIGNAL READY</span>
+            </div>
+          </div>
         </section>
 
         <section className="axis-watch__card axis-watch__query" aria-label="Axis Query Bar">
+          <div className="axis-watch__signal-label" aria-hidden="true">QUERY / REVIEW PATH</div>
           <label>
             <span>Axis Query Bar</span>
             <textarea onChange={(event) => setQuery(event.target.value)} rows={3} value={query} />
@@ -199,8 +209,14 @@ export function AxisWatchRoot() {
             <span>{jobs.length === 0 ? "No clips queued yet." : `${jobs.length} local job${jobs.length === 1 ? "" : "s"}`}</span>
           </div>
           <div className="axis-watch__queue">
+            {jobs.length === 0 && (
+              <div className="axis-watch__empty">
+                <span>NO SIGNAL PLACED</span>
+                <strong>Queue a clip to create candidate moments.</strong>
+              </div>
+            )}
             {jobs.map((job) => (
-              <article className="axis-watch__job" key={job.id}>
+              <article className="axis-watch__job" data-status={job.status} key={job.id}>
                 <div>
                   <strong>{job.clipName}</strong>
                   <span>{job.status}</span>
@@ -226,7 +242,7 @@ export function AxisWatchRoot() {
         )}
 
         <section className="axis-watch__card" aria-labelledby="axis-report-preview-title">
-          <div className="axis-watch__section-title">
+          <div className="axis-watch__section-title axis-watch__report-cover">
             <h2 id="axis-report-preview-title">Report Preview</h2>
             <span>Accepted candidates only.</span>
           </div>
@@ -262,8 +278,11 @@ function CandidateReview({
   return (
     <div className="axis-watch__candidates">
       {candidates.map((candidate) => (
-        <article key={candidate.id}>
-          <span>{formatTimestamp(candidate.timestampSeconds)}</span>
+        <article data-review-status={candidate.status} key={candidate.id}>
+          <div className="axis-watch__candidate-time">
+            <i aria-hidden="true" />
+            <span>{formatTimestamp(candidate.timestampSeconds)}</span>
+          </div>
           <input
             aria-label="Candidate title"
             onChange={(event) => onUpdateCandidate(jobId, candidate.id, { title: event.target.value })}
@@ -275,7 +294,7 @@ function CandidateReview({
             rows={2}
             value={candidate.note}
           />
-          <div>
+          <div className="axis-watch__candidate-actions">
             <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "accepted" })} type="button">Accept</button>
             <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "rejected" })} type="button">Reject</button>
             <button onClick={() => onUpdateCandidate(jobId, candidate.id, { status: "pending" })} type="button">Edit</button>
@@ -336,11 +355,16 @@ function formatTimestamp(seconds: number) {
 
 const styles = `
   .axis-watch {
-    background: #f7f4eb;
+    background:
+      radial-gradient(circle at 18% 8%, rgba(183, 255, 92, 0.24), transparent 22rem),
+      radial-gradient(circle at 84% 0%, rgba(28, 92, 255, 0.14), transparent 24rem),
+      linear-gradient(180deg, #fbf8ef 0%, #efeadc 100%);
     color: #141610;
+    isolation: isolate;
     min-height: 100dvh;
     overflow-x: hidden;
-    padding: max(0.9rem, env(safe-area-inset-top)) 0.9rem max(6rem, env(safe-area-inset-bottom));
+    padding: max(0.9rem, env(safe-area-inset-top)) 0.9rem max(5rem, env(safe-area-inset-bottom));
+    position: relative;
   }
 
   .axis-watch,
@@ -348,16 +372,61 @@ const styles = `
     box-sizing: border-box;
   }
 
+  .axis-signal {
+    inset: 0;
+    pointer-events: none;
+    position: fixed;
+    z-index: -1;
+  }
+
+  .axis-signal--grid {
+    background-image:
+      linear-gradient(rgba(20, 22, 16, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(20, 22, 16, 0.04) 1px, transparent 1px),
+      radial-gradient(circle, rgba(20, 22, 16, 0.14) 1px, transparent 1.5px);
+    background-position: 0 0, 0 0, 0 0;
+    background-size: 36px 36px, 36px 36px, 12px 12px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 78%);
+    opacity: 0.72;
+  }
+
+  .axis-signal--scan {
+    background:
+      repeating-linear-gradient(180deg, rgba(20, 22, 16, 0.055) 0 1px, transparent 1px 6px),
+      linear-gradient(90deg, transparent, rgba(183, 255, 92, 0.16), transparent);
+    mix-blend-mode: multiply;
+    opacity: 0.42;
+  }
+
   .axis-watch__shell {
     display: grid;
     gap: 0.85rem;
     margin: 0 auto;
     max-width: 48rem;
+    position: relative;
+    z-index: 1;
   }
 
   .axis-watch__header {
     display: grid;
     gap: 0.3rem;
+    overflow: hidden;
+    padding: 0.15rem 0 0.35rem;
+    position: relative;
+  }
+
+  .axis-watch__header::after {
+    color: rgba(20, 22, 16, 0.18);
+    content: "AXIS::SIGNAL 0101 / CLIP->QUERY->QUEUE->REVIEW";
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    line-height: 1;
+    position: absolute;
+    right: 0;
+    top: 0.25rem;
+    transform: translateY(-0.12rem);
+    white-space: nowrap;
   }
 
   .axis-watch__header p,
@@ -384,6 +453,7 @@ const styles = `
     font-weight: 950;
     letter-spacing: 0;
     line-height: 0.85;
+    text-shadow: 0.04em 0 rgba(183, 255, 92, 0.26), -0.03em 0 rgba(20, 22, 16, 0.12);
   }
 
   .axis-watch h2 {
@@ -404,9 +474,50 @@ const styles = `
     background: #fffdf7;
     border: 1px solid rgba(20, 22, 16, 0.12);
     border-radius: 0.55rem;
+    box-shadow: 0 1.1rem 3rem rgba(20, 22, 16, 0.08);
     display: grid;
     gap: 0.7rem;
+    overflow: hidden;
     padding: 0.85rem;
+    position: relative;
+  }
+
+  .axis-watch__card::before,
+  .axis-watch__job::before,
+  .axis-watch__candidates article::before {
+    background: linear-gradient(90deg, #141610, #b7ff5c 40%, transparent 72%);
+    content: "";
+    height: 3px;
+    inset: 0 0 auto;
+    opacity: 0.86;
+    position: absolute;
+  }
+
+  .axis-watch__card > *,
+  .axis-watch__job > *,
+  .axis-watch__candidates article > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .axis-watch__query {
+    background:
+      linear-gradient(135deg, rgba(20, 22, 16, 0.94), rgba(34, 38, 27, 0.92)),
+      repeating-linear-gradient(90deg, rgba(183, 255, 92, 0.18) 0 1px, transparent 1px 8px);
+    border-color: rgba(183, 255, 92, 0.38);
+    color: #fffdf7;
+  }
+
+  .axis-watch__query label span {
+    color: rgba(255, 253, 247, 0.7);
+  }
+
+  .axis-watch__signal-label {
+    color: #b7ff5c;
+    font-size: 0.65rem;
+    font-weight: 950;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
   }
 
   .axis-watch__section-title,
@@ -438,11 +549,70 @@ const styles = `
     background: #f7f4eb;
   }
 
+  .axis-watch__video-shell {
+    background: #141610;
+    border: 1px solid rgba(20, 22, 16, 0.16);
+    border-radius: 0.55rem;
+    overflow: hidden;
+    position: relative;
+  }
+
   .axis-watch__video {
     aspect-ratio: 16 / 9;
     background: #141610;
-    border-radius: 0.5rem;
+    display: block;
     width: 100%;
+  }
+
+  .axis-watch__video-overlay {
+    align-items: flex-start;
+    color: rgba(183, 255, 92, 0.86);
+    display: flex;
+    font-size: 0.58rem;
+    font-weight: 950;
+    inset: 0;
+    justify-content: space-between;
+    letter-spacing: 0.12em;
+    padding: 0.55rem;
+    pointer-events: none;
+    position: absolute;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+    text-transform: uppercase;
+  }
+
+  .axis-watch__video-overlay::before,
+  .axis-watch__video-overlay::after {
+    border-color: rgba(183, 255, 92, 0.72);
+    border-style: solid;
+    content: "";
+    height: 1.8rem;
+    position: absolute;
+    width: 1.8rem;
+  }
+
+  .axis-watch__video-overlay::before {
+    border-width: 2px 0 0 2px;
+    left: 0.55rem;
+    top: 0.55rem;
+  }
+
+  .axis-watch__video-overlay::after {
+    border-width: 0 2px 2px 0;
+    bottom: 0.55rem;
+    right: 0.55rem;
+  }
+
+  .axis-watch__video-overlay i {
+    background:
+      linear-gradient(rgba(183, 255, 92, 0.55), rgba(183, 255, 92, 0.55)) center / 1px 100% no-repeat,
+      linear-gradient(90deg, rgba(183, 255, 92, 0.55), rgba(183, 255, 92, 0.55)) center / 100% 1px no-repeat;
+    height: 2rem;
+    left: 50%;
+    opacity: 0.6;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 2rem;
   }
 
   .axis-watch button {
@@ -454,9 +624,9 @@ const styles = `
   }
 
   .axis-watch__primary {
-    background: #141610;
-    border: 1px solid #141610;
-    color: #f7f4eb;
+    background: #b7ff5c;
+    border: 1px solid #b7ff5c;
+    color: #141610;
     width: 100%;
   }
 
@@ -466,7 +636,7 @@ const styles = `
 
   .axis-watch__record,
   .axis-watch__chips,
-  .axis-watch__candidates article div {
+  .axis-watch__candidate-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 0.45rem;
@@ -487,6 +657,52 @@ const styles = `
     gap: 0.6rem;
   }
 
+  .axis-watch__empty {
+    background:
+      radial-gradient(circle at 18% 50%, rgba(183, 255, 92, 0.22), transparent 12rem),
+      repeating-linear-gradient(90deg, rgba(20, 22, 16, 0.08) 0 1px, transparent 1px 10px);
+    border: 1px dashed rgba(20, 22, 16, 0.22);
+    border-radius: 0.55rem;
+    display: grid;
+    gap: 0.25rem;
+    min-height: 8rem;
+    padding: 1rem;
+    place-content: center;
+    text-align: center;
+  }
+
+  .axis-watch__empty span {
+    color: rgba(20, 22, 16, 0.52);
+    font-size: 0.68rem;
+    font-weight: 950;
+    letter-spacing: 0.16em;
+  }
+
+  .axis-watch__empty strong {
+    font-size: 1rem;
+  }
+
+  .axis-watch__job::after {
+    background: linear-gradient(90deg, transparent, rgba(183, 255, 92, 0.18), transparent);
+    content: "";
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    transform: translateX(-100%);
+  }
+
+  .axis-watch__job[data-status="queued"]::after,
+  .axis-watch__job[data-status="sampling"]::after,
+  .axis-watch__job[data-status="watching"]::after {
+    animation: axis-sweep 1.8s linear infinite;
+    opacity: 1;
+  }
+
+  .axis-watch__job[data-status="ready"] {
+    border-color: rgba(72, 150, 48, 0.34);
+  }
+
   .axis-watch__job em {
     background: #fff0d9;
     border: 1px solid #f1c078;
@@ -502,9 +718,65 @@ const styles = `
     padding: 0;
   }
 
+  .axis-watch__candidates {
+    border-left: 2px solid rgba(20, 22, 16, 0.14);
+    margin-left: 0.38rem;
+    padding-left: 0.75rem;
+  }
+
+  .axis-watch__candidates article {
+    box-shadow: none;
+  }
+
+  .axis-watch__candidates article[data-review-status="accepted"] {
+    border-color: rgba(72, 150, 48, 0.38);
+  }
+
+  .axis-watch__candidates article[data-review-status="rejected"] {
+    opacity: 0.66;
+  }
+
+  .axis-watch__candidate-time {
+    align-items: center;
+    display: flex;
+    gap: 0.45rem;
+    margin-left: -1.23rem;
+  }
+
+  .axis-watch__candidate-time i {
+    background: #b7ff5c;
+    border: 2px solid #141610;
+    border-radius: 999px;
+    display: inline-block;
+    height: 0.68rem;
+    width: 0.68rem;
+  }
+
+  .axis-watch__report-cover {
+    background:
+      linear-gradient(135deg, rgba(20, 22, 16, 0.96), rgba(20, 22, 16, 0.84)),
+      repeating-linear-gradient(90deg, rgba(183, 255, 92, 0.18) 0 1px, transparent 1px 9px);
+    border-radius: 0.5rem;
+    color: #fffdf7;
+    margin: -0.2rem -0.2rem 0;
+    padding: 0.8rem;
+  }
+
+  .axis-watch__report-cover span {
+    color: rgba(255, 253, 247, 0.66);
+  }
+
   .axis-watch__report-list li {
+    border-left: 3px solid #b7ff5c;
     display: grid;
     gap: 0.15rem;
+    padding-left: 0.65rem;
+  }
+
+  @keyframes axis-sweep {
+    to {
+      transform: translateX(100%);
+    }
   }
 
   @media (min-width: 760px) {
@@ -514,6 +786,25 @@ const styles = `
 
     .axis-watch__query {
       grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .axis-signal--scan {
+      animation: axis-scan 7s linear infinite;
+    }
+  }
+
+  @keyframes axis-scan {
+    to {
+      background-position: 0 48px, 48rem 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .axis-signal--scan,
+    .axis-watch__job::after {
+      animation: none !important;
     }
   }
 `;
