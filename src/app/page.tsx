@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 
-import { AxisRoutineSetup } from "../components/axis/AxisRoutineSetup";
+import { AxisWatchRoot } from "../components/axis/AxisWatchRoot";
 import { getAxisSurface } from "../lib/axis/surface";
 
 const surfaceCopy = {
@@ -21,7 +21,7 @@ export default async function Home() {
   const requestHeaders = await headers();
   const surface = getAxisSurface(requestHeaders.get("x-forwarded-host") || requestHeaders.get("host"));
   if (surface === "axis") {
-    return <AxisRoutineSetup />;
+    return <AxisWatchRoot />;
   }
 
   const copy = surfaceCopy[surface];
