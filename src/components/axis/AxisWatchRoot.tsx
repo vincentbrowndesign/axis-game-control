@@ -113,7 +113,13 @@ export function AxisWatchRoot() {
       const frames = await sampleVideoFrames(clipUrl, 60);
       updateJob(jobId, { sampledFrameCount: frames.length, status: "watching" });
       const response = await fetch("/api/axis/watch", {
-        body: JSON.stringify({ frames, query: query.trim() }),
+        body: JSON.stringify({
+          clipMetadata: {
+            name: clipFile?.name || "Recorded clip",
+          },
+          frames,
+          query: query.trim(),
+        }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       });
