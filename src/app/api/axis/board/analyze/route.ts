@@ -5,163 +5,29 @@ export const runtime = "nodejs";
 type Point = { x: number; y: number };
 
 type BoardMark =
-  | { id: string; type: "O"; x: number; y: number }
-  | { id: string; type: "X"; x: number; y: number }
-  | { id: string; type: "pass"; from: Point; to: Point }
-  | { id: string; type: "cut"; from: Point; to: Point }
+  | { id: string; type: "O"; label: string; x: number; y: number }
+  | { id: string; type: "X"; label: string; x: number; y: number }
+  | { id: string; type: "pass"; from: Point; to: Point; label?: string }
+  | { id: string; type: "cut"; from: Point; to: Point; label?: string }
   | { id: string; type: "draw"; points: Point[] };
 
-type CoachingSection = {
-  label: string;
+type AxisBoardIntent = "reason" | "populate" | "adjust";
+type SectionLabel = "CALL" | "READ" | "COUNTER" | "CUE" | "WHY" | "TEACH" | "REP" | "WALKTHROUGH";
+
+type AxisBoardSection = {
+  label: SectionLabel;
   text: string;
 };
 
-const SECTION_LABELS = [
-  "What I see",
-  "Where the advantage is",
-  "What can break it",
-  "Best solution",
-  "Rep to test",
-  "Teaching cue",
-] as const;
+type AxisBoardResponse = {
+  intent: AxisBoardIntent;
+  boardMarks?: BoardMark[];
+  sections: AxisBoardSection[];
+};
 
-function fallback(note: string, marks: BoardMark[]): CoachingSection[] {
-  const counts = countMarks(marks);
-  const hasPass = counts.pass > 0;
-  const hasCut = counts.cut > 0;
-  const hasDraw = counts.draw > 0;
-  const hasDefense = counts.X > 0;
-  const lower = note.toLowerCase();
-
-  const action = hasPass && hasCut
-    ? "a pass-and-cut action"
-    : hasCut
-      ? "a cutting action"
-      : hasPass
-        ? "a passing action"
-        : hasDraw
-          ? "a drawn movement path"
-          : "a spacing setup";
-
-  const pressure = hasDefense
-    ? `${counts.X} defender${counts.X === 1 ? "" : "s"} can shrink the first action if the spacing is late`
-    : "without defenders drawn, the main risk is timing rather than coverage";
-
-  const advantage = hasCut
-    ? "The advantage is the cutter moving before the defense can see both ball and man."
-    : hasPass
-      ? "The advantage is created by moving the ball before the defense can load to one side."
-      : "The advantage has to come from spacing first, then a decisive first action.";
-
-  const solution = lower.includes("zone")
-    ? "Put one O in the gap, use the pass to move the zone, then cut behind the second defender as the ball arrives."
-    : hasPass && hasCut
-      ? "Make the pass first, cut immediately off the passer's shoulder, and keep the weak-side O spaced so help has to choose."
-      : hasCut
-        ? "Start the cut after the defender turns their head, not before. The passer should hold the ball until the cutter crosses the defender's face."
-        : hasPass
-          ? "Use the pass to shift the defense, then add a second action right away so the catch is not a dead end."
-          : "Add one clear first trigger: screen, cut, or pass. The board needs a defined advantage before the shot or drive.";
-
-  return [
-    {
-      label: "What I see",
-      text: `The board shows ${counts.O} offensive O${counts.O === 1 ? "" : "s"}, ${counts.X} defensive X${counts.X === 1 ? "" : "s"}, and ${action}.`,
-    },
-    {
-      label: "Where the advantage is",
-      text: advantage,
-    },
-    {
-      label: "What can break it",
-      text: pressure,
-    },
-    {
-      label: "Best solution",
-      text: solution,
-    },
-    {
-      label: "Rep to test",
-      text: `Run it ${Math.max(2, counts.O)}-on-${Math.max(1, counts.X || 1)} from the drawn spots. Score the rep only when the first read creates an open catch or lane.`,
-    },
-    {
-      label: "Teaching cue",
-      text: hasCut ? "Pass, cut, hold spacing." : "Create the first advantage.",
-    },
-  ];
-}
-
-async function visionAnalysis(note: string, imageData: string, marks: BoardMark[]): Promise<CoachingSection[] | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-
-  const boardSummary = summarizeMarks(marks);
-
-  const prompt = `You are Axis Board, a basketball whiteboard analyst for coaches.
-
-Use BOTH sources:
-- Screenshot: what the drawn court looks like.
-- boardMarks: exact structured O/X/pass/cut/draw marks.
-
-Coach question: ${note}
-
-boardMarks:
-${JSON.stringify(boardSummary, null, 2)}
-
-Return ONLY valid JSON:
-{
-  "sections": [
-    { "label": "What I see", "text": "specific to the drawn marks" },
-    { "label": "Where the advantage is", "text": "specific to spacing/action" },
-    { "label": "What can break it", "text": "specific defensive failure point" },
-    { "label": "Best solution", "text": "specific adjustment" },
-    { "label": "Rep to test", "text": "specific practice rep" },
-    { "label": "Teaching cue", "text": "short floor cue" }
-  ]
-}
-
-Rules:
-- Do not give generic coaching language.
-- Refer to O players, X defenders, pass arrows, cut arrows, and spacing when useful.
-- Do not invent player identities, shot results, stats, score, or certainty.
-- Keep each text field one or two concrete sentences.`;
-
-  try {
-    const openai = new OpenAI({ apiKey });
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      max_tokens: 700,
-      temperature: 0.25,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: imageData, detail: "low" } },
-          ],
-        },
-      ],
-    });
-
-    const raw = response.choices[0]?.message?.content?.trim() ?? "";
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-
-    const parsed = JSON.parse(match[0]) as { sections?: unknown[] };
-    if (!Array.isArray(parsed.sections)) return null;
-
-    const sections = parsed.sections
-      .filter((section): section is CoachingSection => {
-        const record = section as Record<string, unknown>;
-        return typeof record.label === "string" && typeof record.text === "string";
-      })
-      .map((section) => ({ label: section.label, text: section.text }));
-
-    return normalizeSections(sections);
-  } catch {
-    return null;
-  }
-}
+const DEFAULT_LABELS: SectionLabel[] = ["CALL", "READ", "COUNTER", "CUE"];
+const DEEP_LABELS: SectionLabel[] = ["WHY", "TEACH", "REP", "WALKTHROUGH"];
+const ALL_LABELS = [...DEFAULT_LABELS, ...DEEP_LABELS];
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null) as {
@@ -171,9 +37,7 @@ export async function POST(request: Request) {
     query?: string;
   } | null;
 
-  if (!body) {
-    return Response.json({ error: "query is required" }, { status: 400 });
-  }
+  if (!body) return Response.json({ error: "query is required" }, { status: 400 });
 
   const rawQuery = typeof body.query === "string"
     ? body.query
@@ -181,28 +45,270 @@ export async function POST(request: Request) {
       ? body.note
       : "";
 
-  if (!rawQuery.trim()) {
-    return Response.json({ error: "query is required" }, { status: 400 });
-  }
+  if (!rawQuery.trim()) return Response.json({ error: "query is required" }, { status: 400 });
 
-  const note = rawQuery.trim().slice(0, 1000);
+  const query = rawQuery.trim().slice(0, 1000);
   const imageData = typeof body.imageData === "string" ? body.imageData : null;
   const marks = parseBoardMarks(body.boardMarks).slice(0, 200);
+  const intent = inferIntent(query, marks);
+  const deep = wantsDepth(query);
 
-  const sections = imageData
-    ? (await visionAnalysis(note, imageData, marks)) ?? fallback(note, marks)
-    : fallback(note, marks);
+  const ai = imageData
+    ? await visionAnalysis({ query, imageData, marks, intent, deep })
+    : null;
 
-  return Response.json({ sections: normalizeSections(sections) });
+  return Response.json(normalizeResponse(ai ?? fallback({ query, marks, intent, deep }), deep));
 }
 
-function normalizeSections(sections: CoachingSection[]) {
-  return SECTION_LABELS.map((label) => ({
-    label,
-    text: sections.find((section) => section.label.toLowerCase() === label.toLowerCase())?.text
-      ?? fallback("", [])[SECTION_LABELS.indexOf(label)]?.text
-      ?? "",
-  }));
+async function visionAnalysis(args: {
+  query: string;
+  imageData: string;
+  marks: BoardMark[];
+  intent: AxisBoardIntent;
+  deep: boolean;
+}): Promise<AxisBoardResponse | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const prompt = `You are Axis Board, a basketball coach in a timeout.
+
+Use BOTH sources:
+- Screenshot: the whiteboard image.
+- boardMarks: structured normalized marks, where x=0 left sideline, x=1 right sideline, y=0 baseline/rim side, y=1 half-court/top side.
+
+Coach question: ${args.query}
+Requested intent: ${args.intent}
+Default depth: ${args.deep ? "deep allowed" : "short only"}
+
+boardMarks:
+${JSON.stringify(summarizeMarks(args.marks), null, 2)}
+
+Return ONLY valid JSON matching:
+{
+  "intent": "reason" | "populate" | "adjust",
+  "boardMarks": [
+    { "id": "o1", "type": "O", "label": "1", "x": 0.5, "y": 0.75 },
+    { "id": "x1", "type": "X", "label": "X1", "x": 0.5, "y": 0.62 },
+    { "id": "p1", "type": "pass", "from": { "x": 0.2, "y": 0.3 }, "to": { "x": 0.5, "y": 0.55 }, "label": "hit" },
+    { "id": "c1", "type": "cut", "from": { "x": 0.8, "y": 0.25 }, "to": { "x": 0.5, "y": 0.12 }, "label": "cut" }
+  ],
+  "sections": [
+    { "label": "CALL", "text": "one short action name or command" },
+    { "label": "READ", "text": "first decision" },
+    { "label": "COUNTER", "text": "what to do if defense takes it away" },
+    { "label": "CUE", "text": "short phrase a coach can say now" }
+  ]
+}
+
+Rules:
+- Sound like a coach in a timeout, not a basketball article.
+- Default sections are ONLY CALL, READ, COUNTER, CUE unless the query asks why, go deeper, explain, teach, rep, practice, or walkthrough.
+- Keep each default text under 12 words.
+- Be specific to O/X/pass/cut spacing. No generic lines.
+- No player identities, shot results, stats, score, or certainty.
+- If intent is populate, return a simple actionable setup in boardMarks.
+- If intent is adjust, return adjusted boardMarks only when the query clearly asks to change the board.
+- If intent is reason, omit boardMarks.`;
+
+  try {
+    const openai = new OpenAI({ apiKey });
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      max_tokens: 650,
+      temperature: 0.2,
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: args.imageData, detail: "low" } },
+          ],
+        },
+      ],
+    });
+
+    const raw = response.choices[0]?.message?.content?.trim() ?? "";
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    return parseAxisBoardResponse(JSON.parse(match[0]), args.intent);
+  } catch {
+    return null;
+  }
+}
+
+function fallback(args: {
+  query: string;
+  marks: BoardMark[];
+  intent: AxisBoardIntent;
+  deep: boolean;
+}): AxisBoardResponse {
+  const workingMarks = args.intent === "populate"
+    ? buildSetupFromQuery(args.query)
+    : args.intent === "adjust"
+      ? adjustSetupFromQuery(args.query, args.marks)
+      : args.marks;
+  const counts = countMarks(workingMarks);
+  const lower = args.query.toLowerCase();
+  const hasTrap = lower.includes("trap") || lower.includes("press");
+  const hasZone = lower.includes("zone");
+  const hasPass = counts.pass > 0;
+  const hasCut = counts.cut > 0;
+
+  const call = hasTrap
+    ? "Middle flash."
+    : hasZone
+      ? "Gap touch."
+      : hasPass && hasCut
+        ? "Pass and cut."
+        : hasCut
+          ? "Back cut."
+          : hasPass
+            ? "Swing it."
+            : "Create a trigger.";
+
+  const read = hasTrap
+    ? "Hit middle before the second X arrives."
+    : hasZone
+      ? "Touch the gap, then look corner."
+      : hasCut
+        ? "Cutter goes when X turns head."
+        : hasPass
+          ? "Move it before help loads."
+          : "Choose pass, cut, or screen first.";
+
+  const counter = hasTrap
+    ? "Trap stays: slot follows. Help leaves: corner lifts."
+    : hasZone
+      ? "Middle closes: skip behind the zone."
+      : hasCut
+        ? "X sits low: pop back to space."
+        : hasPass
+          ? "Overplay: back cut the receiver."
+          : "No advantage: clear and restart.";
+
+  const sections: AxisBoardSection[] = [
+    { label: "CALL", text: call },
+    { label: "READ", text: read },
+    { label: "COUNTER", text: counter },
+    { label: "CUE", text: hasTrap ? "Touch middle, beat the trap." : hasCut ? "Cut when eyes turn." : "Make help choose." },
+  ];
+
+  if (args.deep) {
+    sections.push(
+      { label: "WHY", text: "The first pass moves the nearest X; the cut punishes help." },
+      { label: "TEACH", text: "Freeze on the catch. Point to the open help decision." },
+      { label: "REP", text: `${Math.max(3, counts.O)}-on-${Math.max(2, counts.X || 2)}. Score only clean first reads.` },
+    );
+  }
+
+  return {
+    intent: args.intent,
+    boardMarks: args.intent === "reason" ? undefined : workingMarks,
+    sections,
+  };
+}
+
+function buildSetupFromQuery(query: string): BoardMark[] {
+  const lower = query.toLowerCase();
+  if (lower.includes("corner") && lower.includes("trap")) {
+    return [
+      { id: "o1", type: "O", label: "1", x: 0.84, y: 0.22 },
+      { id: "o2", type: "O", label: "2", x: 0.66, y: 0.44 },
+      { id: "o3", type: "O", label: "3", x: 0.50, y: 0.58 },
+      { id: "o4", type: "O", label: "4", x: 0.24, y: 0.30 },
+      { id: "x1", type: "X", label: "X1", x: 0.76, y: 0.22 },
+      { id: "x2", type: "X", label: "X2", x: 0.86, y: 0.34 },
+      { id: "x3", type: "X", label: "X3", x: 0.58, y: 0.47 },
+      { id: "p1", type: "pass", from: { x: 0.84, y: 0.22 }, to: { x: 0.50, y: 0.58 }, label: "middle" },
+      { id: "c1", type: "cut", from: { x: 0.66, y: 0.44 }, to: { x: 0.90, y: 0.14 }, label: "behind" },
+    ];
+  }
+
+  return [
+    { id: "o1", type: "O", label: "1", x: 0.50, y: 0.76 },
+    { id: "o2", type: "O", label: "2", x: 0.22, y: 0.48 },
+    { id: "o3", type: "O", label: "3", x: 0.78, y: 0.48 },
+    { id: "o4", type: "O", label: "4", x: 0.38, y: 0.24 },
+    { id: "x1", type: "X", label: "X1", x: 0.50, y: 0.62 },
+    { id: "x2", type: "X", label: "X2", x: 0.28, y: 0.42 },
+    { id: "x3", type: "X", label: "X3", x: 0.70, y: 0.42 },
+    { id: "p1", type: "pass", from: { x: 0.50, y: 0.76 }, to: { x: 0.38, y: 0.24 }, label: "flash" },
+    { id: "c1", type: "cut", from: { x: 0.78, y: 0.48 }, to: { x: 0.58, y: 0.13 }, label: "cut" },
+  ];
+}
+
+function adjustSetupFromQuery(query: string, marks: BoardMark[]): BoardMark[] {
+  if (marks.length === 0) return buildSetupFromQuery(query);
+  const lower = query.toLowerCase();
+  if (!lower.includes("space") && !lower.includes("corner") && !lower.includes("trap") && !lower.includes("adjust")) {
+    return marks;
+  }
+
+  return marks.map((mark) => {
+    if (mark.type === "O" && mark.x > 0.5) return { ...mark, x: clamp01(mark.x + 0.06) };
+    if (mark.type === "O" && mark.x < 0.5) return { ...mark, x: clamp01(mark.x - 0.06) };
+    return mark;
+  });
+}
+
+function inferIntent(query: string, marks: BoardMark[]): AxisBoardIntent {
+  const lower = query.toLowerCase();
+  const populateWords = ["build", "show", "set up", "setup", "draw", "create", "design"];
+  const adjustWords = ["fix", "adjust", "change", "shift", "move", "replace", "counter this"];
+  if (marks.length === 0 && populateWords.some((word) => lower.includes(word))) return "populate";
+  if (marks.length > 0 && adjustWords.some((word) => lower.includes(word))) return "adjust";
+  return "reason";
+}
+
+function wantsDepth(query: string) {
+  const lower = query.toLowerCase();
+  return ["why", "go deeper", "explain", "teach", "turn this into a rep", "practice", "walkthrough", "rep"].some((word) => lower.includes(word));
+}
+
+function normalizeResponse(response: AxisBoardResponse, deep: boolean): AxisBoardResponse {
+  const labels = deep ? ALL_LABELS : DEFAULT_LABELS;
+  const sections = response.sections
+    .filter((section) => labels.includes(section.label))
+    .map((section) => ({
+      label: section.label,
+      text: section.text.trim().slice(0, section.label === "CUE" ? 80 : 140),
+    }));
+
+  const filled = DEFAULT_LABELS.map((label) => (
+    sections.find((section) => section.label === label)
+    ?? fallback({ query: "", marks: response.boardMarks ?? [], intent: "reason", deep: false }).sections.find((section) => section.label === label)!
+  ));
+
+  const extra = deep ? sections.filter((section) => DEEP_LABELS.includes(section.label)) : [];
+
+  return {
+    intent: response.intent,
+    boardMarks: response.boardMarks ? parseBoardMarks(response.boardMarks) : undefined,
+    sections: [...filled, ...extra],
+  };
+}
+
+function parseAxisBoardResponse(value: unknown, fallbackIntent: AxisBoardIntent): AxisBoardResponse | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const intent = record.intent === "populate" || record.intent === "adjust" || record.intent === "reason"
+    ? record.intent
+    : fallbackIntent;
+  const sections = Array.isArray(record.sections)
+    ? record.sections.flatMap((section): AxisBoardSection[] => {
+      if (!section || typeof section !== "object") return [];
+      const item = section as Record<string, unknown>;
+      if (!isSectionLabel(item.label) || typeof item.text !== "string") return [];
+      return [{ label: item.label, text: item.text }];
+    })
+    : [];
+
+  if (sections.length === 0) return null;
+  return {
+    intent,
+    boardMarks: parseBoardMarks(record.boardMarks),
+    sections,
+  };
 }
 
 function parseBoardMarks(value: unknown): BoardMark[] {
@@ -212,15 +318,30 @@ function parseBoardMarks(value: unknown): BoardMark[] {
   for (const item of value) {
     if (!item || typeof item !== "object") continue;
     const record = item as Record<string, unknown>;
-    const id = typeof record.id === "string" ? record.id : crypto.randomUUID();
+    const id = typeof record.id === "string" && record.id ? record.id : crypto.randomUUID();
     const type = record.type;
 
     if ((type === "O" || type === "X") && isFiniteNumber(record.x) && isFiniteNumber(record.y)) {
-      marks.push({ id, type, x: clamp01(record.x), y: clamp01(record.y) });
+      marks.push({
+        id,
+        type,
+        label: typeof record.label === "string" && record.label.trim()
+          ? record.label.trim().slice(0, 3)
+          : defaultPlayerLabel(type, marks),
+        x: clamp01(record.x),
+        y: clamp01(record.y),
+      });
     }
 
     if ((type === "pass" || type === "cut") && isPoint(record.from) && isPoint(record.to)) {
-      marks.push({ id, type, from: normalizePoint(record.from), to: normalizePoint(record.to) });
+      const mark: Extract<BoardMark, { type: "pass" | "cut" }> = {
+        id,
+        type,
+        from: normalizePoint(record.from),
+        to: normalizePoint(record.to),
+      };
+      if (typeof record.label === "string" && record.label.trim()) mark.label = record.label.trim().slice(0, 12);
+      marks.push(mark);
     }
 
     if (type === "draw" && Array.isArray(record.points)) {
@@ -244,6 +365,15 @@ function countMarks(marks: BoardMark[]) {
     acc[mark.type] += 1;
     return acc;
   }, { O: 0, X: 0, pass: 0, cut: 0, draw: 0 });
+}
+
+function defaultPlayerLabel(type: "O" | "X", marks: BoardMark[]) {
+  const count = marks.filter((mark) => mark.type === type).length + 1;
+  return type === "O" ? String(count) : `X${count}`;
+}
+
+function isSectionLabel(value: unknown): value is SectionLabel {
+  return typeof value === "string" && ALL_LABELS.includes(value as SectionLabel);
 }
 
 function isPoint(value: unknown): value is Point {

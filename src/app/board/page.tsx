@@ -5,10 +5,10 @@ import { useEffect, useRef, useState } from "react";
 type Point = { x: number; y: number };
 
 type BoardMark =
-  | { id: string; type: "O"; x: number; y: number }
-  | { id: string; type: "X"; x: number; y: number }
-  | { id: string; type: "pass"; from: Point; to: Point }
-  | { id: string; type: "cut"; from: Point; to: Point }
+  | { id: string; type: "O"; label: string; x: number; y: number }
+  | { id: string; type: "X"; label: string; x: number; y: number }
+  | { id: string; type: "pass"; from: Point; to: Point; label?: string }
+  | { id: string; type: "cut"; from: Point; to: Point; label?: string }
   | { id: string; type: "draw"; points: Point[] };
 
 type Tool = "move" | "draw" | "O" | "X" | "pass" | "cut";
@@ -16,6 +16,12 @@ type Tool = "move" | "draw" | "O" | "X" | "pass" | "cut";
 type CoachingSection = {
   label: string;
   text: string;
+};
+
+type AxisBoardResponse = {
+  intent?: "reason" | "populate" | "adjust";
+  boardMarks?: BoardMark[];
+  sections?: CoachingSection[];
 };
 
 const TOOL_LABELS: Array<{ id: Tool; label: string }> = [
@@ -29,6 +35,11 @@ const TOOL_LABELS: Array<{ id: Tool; label: string }> = [
 
 function nid() {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function nextPlayerLabel(type: "O" | "X", marks: BoardMark[]) {
+  const next = marks.filter((mark) => mark.type === type).length + 1;
+  return type === "O" ? String(next) : `X${next}`;
 }
 
 function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -125,6 +136,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, mark: Extract<BoardMark, { ty
     ctx.beginPath();
     ctx.arc(x, y, 16, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.fillStyle = "#d8eaff";
   } else {
     const s = 11;
     ctx.strokeStyle = "#ff6b4a";
@@ -139,7 +151,14 @@ function drawPlayer(ctx: CanvasRenderingContext2D, mark: Extract<BoardMark, { ty
     ctx.beginPath();
     ctx.arc(x, y, 16, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "#ffd5cb";
   }
+
+  ctx.font = "700 10px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(mark.label, x, y + (mark.type === "O" ? 0 : 1));
 
   ctx.restore();
 }
@@ -175,6 +194,21 @@ function drawArrow(ctx: CanvasRenderingContext2D, from: Point, to: Point, w: num
   ctx.restore();
 }
 
+function drawArrowMark(ctx: CanvasRenderingContext2D, mark: Extract<BoardMark, { type: "pass" | "cut" }>, w: number, h: number) {
+  drawArrow(ctx, mark.from, mark.to, w, h, mark.type === "cut");
+  if (!mark.label) return;
+
+  const x = ((mark.from.x + mark.to.x) / 2) * w;
+  const y = ((mark.from.y + mark.to.y) / 2) * h;
+  ctx.save();
+  ctx.fillStyle = mark.type === "cut" ? "rgba(244,244,240,0.72)" : "rgba(168,217,51,0.9)";
+  ctx.font = "700 10px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(mark.label, x, y - 5);
+  ctx.restore();
+}
+
 function drawFreehand(ctx: CanvasRenderingContext2D, points: Point[], w: number, h: number) {
   if (points.length < 2) return;
 
@@ -194,8 +228,7 @@ function renderBoard(ctx: CanvasRenderingContext2D, w: number, h: number, marks:
   drawCourt(ctx, w, h);
   for (const mark of [...marks, ...(draft ? [draft] : [])]) {
     if (mark.type === "O" || mark.type === "X") drawPlayer(ctx, mark, w, h);
-    if (mark.type === "pass") drawArrow(ctx, mark.from, mark.to, w, h, false);
-    if (mark.type === "cut") drawArrow(ctx, mark.from, mark.to, w, h, true);
+    if (mark.type === "pass" || mark.type === "cut") drawArrowMark(ctx, mark, w, h);
     if (mark.type === "draw") drawFreehand(ctx, mark.points, w, h);
   }
 }
@@ -301,7 +334,13 @@ export default function BoardPage() {
     const point = getPoint(e);
 
     if (tool === "O" || tool === "X") {
-      updateMarks([...marksRef.current, { id: nid(), type: tool, x: point.x, y: point.y }]);
+      updateMarks([...marksRef.current, {
+        id: nid(),
+        type: tool,
+        label: nextPlayerLabel(tool, marksRef.current),
+        x: point.x,
+        y: point.y,
+      }]);
       return;
     }
 
@@ -396,7 +435,10 @@ export default function BoardPage() {
           boardMarks,
         }),
       });
-      const data = await res.json().catch(() => null) as { sections?: CoachingSection[] } | null;
+      const data = await res.json().catch(() => null) as AxisBoardResponse | null;
+      if (data?.boardMarks && (data.intent === "populate" || data.intent === "adjust")) {
+        updateMarks(data.boardMarks);
+      }
       if (data?.sections) setSections(data.sections);
     } catch {
       // Keep the existing board and answer visible if the request fails.
