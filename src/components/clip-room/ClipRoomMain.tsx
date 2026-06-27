@@ -32,11 +32,13 @@ export function ClipRoomMain() {
 
       <main className="cr-main">
         <div className="cr-actions">
-          <Link href="/axis/clip-room/new?mode=record" className="cr-action cr-action--primary">
-            Record Clip
+          <Link href="/axis/clip-room/new?mode=record" className="cr-card cr-card--primary">
+            <span className="cr-card-title">Record Clip</span>
+            <span className="cr-card-sub">Use your camera</span>
           </Link>
-          <Link href="/axis/clip-room/new?mode=upload" className="cr-action">
-            Upload Clip
+          <Link href="/axis/clip-room/new?mode=upload" className="cr-card">
+            <span className="cr-card-title">Upload Clip</span>
+            <span className="cr-card-sub">Choose a video file</span>
           </Link>
         </div>
 
@@ -50,7 +52,9 @@ export function ClipRoomMain() {
             <div className="cr-clip-list">
               {clips.map((clip) => (
                 <Link key={clip.id} href={`/axis/clip-room/${clip.id}`} className="cr-clip-card">
-                  <span className="cr-clip-origin">{clip.origin === "recorded" ? "REC" : "UP"}</span>
+                  <span className="cr-clip-origin">
+                    {clip.origin === "recorded" ? "REC" : "UP"}
+                  </span>
                   <span className="cr-clip-name">{clip.filename ?? "Clip"}</span>
                   <span className={`cr-clip-status cr-clip-status--${clip.status}`}>
                     {statusLabel(clip.status)}
@@ -107,40 +111,53 @@ export function ClipRoomMain() {
         }
 
         .cr-actions {
-          display: flex;
-          flex-direction: column;
+          display: grid;
           gap: 12px;
-          max-width: 360px;
+          grid-template-columns: 1fr 1fr;
+          max-width: 480px;
         }
 
-        .cr-action {
-          align-items: center;
+        .cr-card {
+          align-items: flex-start;
+          background: rgba(255, 255, 255, 0.04);
           border: 1px solid var(--axis-line);
-          border-radius: 10px;
+          border-radius: 14px;
           color: var(--axis-ink);
           display: flex;
-          font-size: clamp(18px, 4vw, 24px);
-          font-weight: 700;
-          justify-content: center;
-          letter-spacing: -0.02em;
-          min-height: 64px;
-          padding: 0 24px;
+          flex-direction: column;
+          gap: 4px;
+          min-height: 100px;
+          padding: 20px 18px;
           text-decoration: none;
-          transition: background 0.15s;
+          transition: background 0.15s, border-color 0.15s;
         }
 
-        .cr-action:hover {
-          background: rgba(255, 255, 255, 0.04);
+        .cr-card:hover {
+          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(255, 255, 255, 0.2);
         }
 
-        .cr-action--primary {
+        .cr-card--primary {
           background: var(--axis-live);
           border-color: transparent;
           color: #070a04;
         }
 
-        .cr-action--primary:hover {
-          background: color-mix(in srgb, var(--axis-live) 88%, white);
+        .cr-card--primary:hover {
+          background: color-mix(in srgb, var(--axis-live) 90%, white);
+        }
+
+        .cr-card-title {
+          font-size: clamp(16px, 3vw, 20px);
+          font-weight: 800;
+          letter-spacing: -0.02em;
+          line-height: 1.1;
+        }
+
+        .cr-card-sub {
+          font-size: 12px;
+          font-weight: 500;
+          opacity: 0.68;
         }
 
         .cr-library {
@@ -186,11 +203,11 @@ export function ClipRoomMain() {
           background: rgba(255,255,255,0.08);
           border-radius: 4px;
           color: var(--axis-muted);
+          flex-shrink: 0;
           font-size: 10px;
           font-weight: 700;
           letter-spacing: 0.06em;
           padding: 2px 5px;
-          flex-shrink: 0;
         }
 
         .cr-clip-name {
@@ -202,17 +219,17 @@ export function ClipRoomMain() {
         }
 
         .cr-clip-status {
+          flex-shrink: 0;
           font-size: 11px;
           font-weight: 600;
-          flex-shrink: 0;
         }
 
-        .cr-clip-status--ready { color: var(--axis-live); }
+        .cr-clip-status--ready    { color: var(--axis-live); }
         .cr-clip-status--processing { color: #f4c95d; }
-        .cr-clip-status--failed { color: #e55; }
+        .cr-clip-status--failed   { color: #e77; }
         .cr-clip-status--uploading,
         .cr-clip-status--uploaded,
-        .cr-clip-status--pending { color: var(--axis-muted); }
+        .cr-clip-status--pending  { color: var(--axis-muted); }
 
         .cr-muted {
           color: var(--axis-muted);
@@ -221,6 +238,10 @@ export function ClipRoomMain() {
         }
 
         .cr-muted--center { text-align: center; }
+
+        @media (max-width: 400px) {
+          .cr-actions { grid-template-columns: 1fr; }
+        }
       `}</style>
     </div>
   );
