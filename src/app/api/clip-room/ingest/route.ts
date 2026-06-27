@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { getAxisRequestUser } from "../../../../lib/axis-request-auth";
 import { createClipResult, createClipSource, upsertClipSetup } from "../../../../lib/clip-room/db";
+import { saveOriginalClipForAnalysis } from "../../../../lib/clip-room/original-storage";
 import { uploadCloudflareStreamVideoFile } from "../../../../lib/cloudflare-stream";
 
 export const runtime = "nodejs";
@@ -41,8 +42,9 @@ export async function POST(request: Request) {
 
   const filename = videoEntry.name || "clip.mp4";
   const fileSize = videoEntry.size;
+  const contentType = videoEntry.type || "video/mp4";
 
-  // Write video to a temp file so we can upload it to Cloudflare
+  // Write once locally, then preserve the original for analysis before creating the playback copy.
   let tmpPath: string | null = null;
   try {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "clip-ingest-"));
@@ -50,7 +52,18 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await videoEntry.arrayBuffer());
     await fs.writeFile(tmpPath, buffer);
 
-    // Upload to Cloudflare Stream
+    const original = await saveOriginalClipForAnalysis({
+      contentType,
+      filename,
+      filePath: tmpPath,
+      ownerId: auth.userId,
+    });
+    if (original.error || !original.uri) {
+      console.error("CLIP_INGEST_ORIGINAL_SAVE_ERROR", { error: original.error, filename, fileSize });
+      return Response.json({ error: "Upload could not start. Please choose a video and try again." }, { status: 502 });
+    }
+
+    // Cloudflare Stream is the playback copy. Analysis waits for Stream-ready, then reads the original.
     const upload = await uploadCloudflareStreamVideoFile({ filePath: tmpPath, filename });
     if (upload.error || !upload.uid) {
       console.error("CLIP_INGEST_CLOUDFLARE_ERROR", { error: upload.error, filename, fileSize });
@@ -67,6 +80,7 @@ export async function POST(request: Request) {
       filename,
       fileSize,
       cloudflareUid,
+      uploadUrl: original.uri,
       videoUrl: playbackUrl,
     });
 

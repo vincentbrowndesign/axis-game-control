@@ -161,6 +161,11 @@ export const clipRoomProcessing = task({
       }
 
       // ── 5. Extract analysis frames + CV detection stage ────────────────────
+      await updateClipSource(clipId, {
+        processingStage: "frame_extraction",
+        processingProgress: 32,
+      });
+
       await fs.mkdir(framesDir, { recursive: true });
       await extractAxisFrames({
         fps: 2,

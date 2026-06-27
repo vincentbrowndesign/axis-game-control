@@ -1,6 +1,5 @@
-import { tasks } from "@trigger.dev/sdk/v3";
 import { getAxisRequestUser } from "../../../../../lib/axis-request-auth";
-import { getClipSetup, getClipSource, updateClipSource } from "../../../../../lib/clip-room/db";
+import { createClipResult, getClipSource, updateClipSource } from "../../../../../lib/clip-room/db";
 
 export const runtime = "nodejs";
 
@@ -16,7 +15,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   return Response.json({ clip: result.record });
 }
 
-// Called after upload completes to confirm and start processing.
+// Called after upload completes. Processing still waits for the Stream-ready webhook.
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await getAxisRequestUser(request);
   if (auth.code) return Response.json({ error: auth.reason }, { status: 401 });
@@ -26,24 +25,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (source.error || !source.record) return Response.json({ error: source.error ?? "not found" }, { status: 404 });
   if (source.record.ownerId !== auth.userId) return Response.json({ error: "forbidden" }, { status: 403 });
 
-  await updateClipSource(id, { status: "uploaded", processingProgress: 5 });
+  await updateClipSource(id, {
+    status: "uploaded",
+    processingStage: "waiting_for_stream_ready",
+    processingProgress: 5,
+  });
 
-  const setup = await getClipSetup(id);
+  await createClipResult({
+    clipId: id,
+    ownerId: auth.userId,
+    isPlayable: false,
+    outcome: "pending",
+    outcomeReason: "Waiting for Cloudflare Stream to finish processing.",
+  });
 
-  try {
-    await tasks.trigger("clip-room-processing", {
-      clipId: id,
-      ownerId: auth.userId,
-      cloudflareUid: source.record.cloudflareUid!,
-      setup: setup.record ?? null,
-    });
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    await updateClipSource(id, { status: "failed", error: reason });
-    return Response.json({ error: reason }, { status: 502 });
-  }
-
-  await updateClipSource(id, { status: "processing", processingStage: "queued", processingProgress: 8 });
-
-  return Response.json({ status: "processing" });
+  return Response.json({ status: "waiting_for_stream_ready" });
 }

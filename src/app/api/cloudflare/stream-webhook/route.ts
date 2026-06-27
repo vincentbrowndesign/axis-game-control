@@ -42,6 +42,7 @@ export async function POST(request: Request) {
         clipId: src.id,
         ownerId: src.ownerId,
         cloudflareUid,
+        originalStorageUri: src.uploadUrl,
       }, {
         queue: clipRoomTriggerQueue,
         ttl: clipRoomTriggerTtl,

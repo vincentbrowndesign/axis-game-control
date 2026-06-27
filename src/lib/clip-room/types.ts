@@ -205,6 +205,7 @@ export type ClipProcessingPayload = {
   clipId: string;
   ownerId: string;
   cloudflareUid: string;
+  originalStorageUri?: string | null;
 };
 
 // ─── Source probe + clip result ───────────────────────────────────────────────
