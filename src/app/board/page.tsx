@@ -2,14 +2,34 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type DrawMode = "draw" | "O" | "X";
+type Point = { x: number; y: number };
+
+type BoardMark =
+  | { id: string; type: "O"; x: number; y: number }
+  | { id: string; type: "X"; x: number; y: number }
+  | { id: string; type: "pass"; from: Point; to: Point }
+  | { id: string; type: "cut"; from: Point; to: Point }
+  | { id: string; type: "draw"; points: Point[] };
+
+type Tool = "move" | "draw" | "O" | "X" | "pass" | "cut";
 
 type CoachingSection = {
   label: string;
   text: string;
 };
 
-// ─── Canvas utilities ─────────────────────────────────────────────────────────
+const TOOL_LABELS: Array<{ id: Tool; label: string }> = [
+  { id: "move", label: "Move" },
+  { id: "draw", label: "Draw" },
+  { id: "O", label: "O" },
+  { id: "X", label: "X" },
+  { id: "pass", label: "Pass" },
+  { id: "cut", label: "Cut" },
+];
+
+function nid() {
+  return Math.random().toString(36).slice(2, 10);
+}
 
 function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const pad = Math.min(w * 0.05, h * 0.04, 22);
@@ -30,7 +50,6 @@ function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const bx = cx;
   const by = pad + ch * 0.11;
 
-  // Backboard
   ctx.beginPath();
   ctx.moveTo(bx - cw * 0.1, pad + ch * 0.027);
   ctx.lineTo(bx + cw * 0.1, pad + ch * 0.027);
@@ -38,7 +57,6 @@ function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.stroke();
   ctx.lineWidth = 1.5;
 
-  // Hoop
   ctx.beginPath();
   ctx.arc(bx, by, cw * 0.035, 0, Math.PI * 2);
   ctx.strokeStyle = "#a8d933";
@@ -47,200 +65,353 @@ function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.strokeStyle = line;
   ctx.lineWidth = 1.5;
 
-  // Restricted area
   ctx.beginPath();
   ctx.arc(bx, by, cw * 0.065, 0, Math.PI);
   ctx.stroke();
 
-  // Lane
-  const lw = cw * 0.32;
-  const lh = ch * 0.43;
-  ctx.strokeRect(cx - lw / 2, pad, lw, lh);
+  const laneW = cw * 0.32;
+  const laneH = ch * 0.43;
+  ctx.strokeRect(cx - laneW / 2, pad, laneW, laneH);
 
-  // FT circle
-  const ftR = lw * 0.46;
+  const ftR = laneW * 0.46;
   ctx.beginPath();
-  ctx.arc(cx, pad + lh, ftR, Math.PI, 0);
+  ctx.arc(cx, pad + laneH, ftR, Math.PI, 0);
   ctx.stroke();
   ctx.save();
   ctx.setLineDash([5, 5]);
   ctx.beginPath();
-  ctx.arc(cx, pad + lh, ftR, 0, Math.PI);
+  ctx.arc(cx, pad + laneH, ftR, 0, Math.PI);
   ctx.stroke();
-  ctx.setLineDash([]);
   ctx.restore();
 
-  // Three-point
-  const tpW = cw * 0.43;
-  const tpR = cw * 0.475;
-  const cY = by + Math.sqrt(Math.max(0, tpR * tpR - tpW * tpW));
+  const wingX = cw * 0.43;
+  const arcR = cw * 0.475;
+  const cornerY = by + Math.sqrt(Math.max(0, arcR * arcR - wingX * wingX));
   ctx.beginPath();
-  ctx.moveTo(cx - tpW, pad);
-  ctx.lineTo(cx - tpW, cY);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx + tpW, pad);
-  ctx.lineTo(cx + tpW, cY);
-  ctx.stroke();
-  const a1 = Math.PI - Math.acos(tpW / tpR);
-  const a2 = Math.acos(tpW / tpR);
-  ctx.beginPath();
-  ctx.arc(bx, by, tpR, a1, a2, true);
+  ctx.moveTo(cx - wingX, pad);
+  ctx.lineTo(cx - wingX, cornerY);
+  ctx.moveTo(cx + wingX, pad);
+  ctx.lineTo(cx + wingX, cornerY);
   ctx.stroke();
 
-  // Half-court
+  const a1 = Math.PI - Math.acos(wingX / arcR);
+  const a2 = Math.acos(wingX / arcR);
+  ctx.beginPath();
+  ctx.arc(bx, by, arcR, a1, a2, true);
+  ctx.stroke();
+
   ctx.beginPath();
   ctx.moveTo(pad, pad + ch / 2);
   ctx.lineTo(pad + cw, pad + ch / 2);
   ctx.stroke();
 
-  // Center circle
   ctx.beginPath();
-  ctx.arc(cx, pad + ch / 2, lw * 0.38, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
-function stampO(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  ctx.save();
-  ctx.strokeStyle = "#4a9eff";
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.arc(x, y, 15, 0, Math.PI * 2);
+  ctx.arc(cx, pad + ch / 2, laneW * 0.38, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
 }
 
-function stampX(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  const s = 11;
+function drawPlayer(ctx: CanvasRenderingContext2D, mark: Extract<BoardMark, { type: "O" | "X" }>, w: number, h: number) {
+  const x = mark.x * w;
+  const y = mark.y * h;
+
   ctx.save();
-  ctx.strokeStyle = "#ff6b4a";
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.8;
   ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (mark.type === "O") {
+    ctx.strokeStyle = "#4a9eff";
+    ctx.beginPath();
+    ctx.arc(x, y, 16, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    const s = 11;
+    ctx.strokeStyle = "#ff6b4a";
+    ctx.beginPath();
+    ctx.moveTo(x - s, y - s);
+    ctx.lineTo(x + s, y + s);
+    ctx.moveTo(x + s, y - s);
+    ctx.lineTo(x - s, y + s);
+    ctx.stroke();
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y, 16, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawArrow(ctx: CanvasRenderingContext2D, from: Point, to: Point, w: number, h: number, dashed: boolean) {
+  const sx = from.x * w;
+  const sy = from.y * h;
+  const ex = to.x * w;
+  const ey = to.y * h;
+  const angle = Math.atan2(ey - sy, ex - sx);
+  const head = 13;
+
+  ctx.save();
+  ctx.strokeStyle = dashed ? "rgba(244,244,240,0.72)" : "rgba(168,217,51,0.9)";
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  if (dashed) ctx.setLineDash([8, 7]);
+
   ctx.beginPath();
-  ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y + s);
-  ctx.moveTo(x + s, y - s); ctx.lineTo(x - s, y + s);
+  ctx.moveTo(sx, sy);
+  ctx.lineTo(ex, ey);
   ctx.stroke();
-  ctx.lineWidth = 1.5;
-  ctx.globalAlpha = 0.35;
+
+  ctx.setLineDash([]);
   ctx.beginPath();
-  ctx.arc(x, y, 16, 0, Math.PI * 2);
+  ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - head * Math.cos(angle - Math.PI / 6), ey - head * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(ex - head * Math.cos(angle + Math.PI / 6), ey - head * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawFreehand(ctx: CanvasRenderingContext2D, points: Point[], w: number, h: number) {
+  if (points.length < 2) return;
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(244,244,240,0.92)";
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(points[0].x * w, points[0].y * h);
+  for (const point of points.slice(1)) ctx.lineTo(point.x * w, point.y * h);
   ctx.stroke();
   ctx.restore();
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+function renderBoard(ctx: CanvasRenderingContext2D, w: number, h: number, marks: BoardMark[], draft: BoardMark | null) {
+  drawCourt(ctx, w, h);
+  for (const mark of [...marks, ...(draft ? [draft] : [])]) {
+    if (mark.type === "O" || mark.type === "X") drawPlayer(ctx, mark, w, h);
+    if (mark.type === "pass") drawArrow(ctx, mark.from, mark.to, w, h, false);
+    if (mark.type === "cut") drawArrow(ctx, mark.from, mark.to, w, h, true);
+    if (mark.type === "draw") drawFreehand(ctx, mark.points, w, h);
+  }
+}
+
+function describeMarks(marks: BoardMark[]) {
+  const counts = marks.reduce<Record<string, number>>((acc, mark) => {
+    acc[mark.type] = (acc[mark.type] ?? 0) + 1;
+    return acc;
+  }, {});
+  return `${counts.O ?? 0} offense, ${counts.X ?? 0} defenders, ${counts.pass ?? 0} passes, ${counts.cut ?? 0} cuts, ${counts.draw ?? 0} drawn lines`;
+}
 
 export default function BoardPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const isDrawing = useRef(false);
-  const lastPt = useRef<{ x: number; y: number } | null>(null);
+  const marksRef = useRef<BoardMark[]>([]);
+  const draftRef = useRef<BoardMark | null>(null);
+  const dragRef = useRef<
+    | { kind: "draw"; points: Point[] }
+    | { kind: "move"; id: string }
+    | { kind: "arrow"; type: "pass" | "cut"; from: Point; to: Point }
+    | null
+  >(null);
 
-  const [mode, setMode] = useState<DrawMode>("draw");
+  const [tool, setTool] = useState<Tool>("move");
+  const [boardMarks, setBoardMarks] = useState<BoardMark[]>([]);
   const [query, setQuery] = useState("");
   const [sections, setSections] = useState<CoachingSection[] | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+
+  useEffect(() => {
+    marksRef.current = boardMarks;
+    redraw();
+  }, [boardMarks]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
 
-    const init = () => {
-      canvas.width = wrap.clientWidth;
-      canvas.height = wrap.clientHeight;
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = wrap.getBoundingClientRect();
+      const width = Math.max(1, Math.floor(rect.width));
+      const height = Math.max(1, Math.floor(rect.height));
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      ctxRef.current = ctx;
-      drawCourt(ctx, canvas.width, canvas.height);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      renderBoard(ctx, width, height, marksRef.current, draftRef.current);
     };
 
-    init();
-    const ro = new ResizeObserver(init);
+    resize();
+    const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     return () => ro.disconnect();
   }, []);
 
-  function getXY(e: React.PointerEvent<HTMLCanvasElement>) {
+  function redraw(draft: BoardMark | null = draftRef.current) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    if (!ctx || rect.width <= 0 || rect.height <= 0) return;
+    renderBoard(ctx, rect.width, rect.height, marksRef.current, draft);
+  }
+
+  function getPoint(e: React.PointerEvent<HTMLCanvasElement>): Point {
     const r = e.currentTarget.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    return {
+      x: Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - r.top) / r.height)),
+    };
+  }
+
+  function hitPlayer(point: Point) {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const hitRadius = 24;
+
+    for (const mark of [...marksRef.current].reverse()) {
+      if (mark.type !== "O" && mark.type !== "X") continue;
+      const dx = mark.x * rect.width - point.x * rect.width;
+      const dy = mark.y * rect.height - point.y * rect.height;
+      if (Math.hypot(dx, dy) <= hitRadius) return mark;
+    }
+
+    return null;
+  }
+
+  function updateMarks(next: BoardMark[]) {
+    marksRef.current = next;
+    setBoardMarks(next);
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    const ctx = ctxRef.current;
-    if (!ctx) return;
-    const { x, y } = getXY(e);
-    if (mode === "O") { stampO(ctx, x, y); return; }
-    if (mode === "X") { stampX(ctx, x, y); return; }
-    isDrawing.current = true;
-    lastPt.current = { x, y };
+    const point = getPoint(e);
+
+    if (tool === "O" || tool === "X") {
+      updateMarks([...marksRef.current, { id: nid(), type: tool, x: point.x, y: point.y }]);
+      return;
+    }
+
+    if (tool === "move") {
+      const hit = hitPlayer(point);
+      if (hit) dragRef.current = { kind: "move", id: hit.id };
+      return;
+    }
+
+    if (tool === "draw") {
+      dragRef.current = { kind: "draw", points: [point] };
+      draftRef.current = { id: "draft", type: "draw", points: [point] };
+      redraw();
+      return;
+    }
+
+    dragRef.current = { kind: "arrow", type: tool, from: point, to: point };
+    draftRef.current = { id: "draft", type: tool, from: point, to: point };
+    redraw();
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLCanvasElement>) {
     e.preventDefault();
-    if (!isDrawing.current || mode !== "draw") return;
-    const ctx = ctxRef.current;
-    if (!ctx || !lastPt.current) return;
-    const { x, y } = getXY(e);
-    ctx.save();
-    ctx.strokeStyle = "rgba(244,244,240,0.92)";
-    ctx.lineWidth = 2.2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.beginPath();
-    ctx.moveTo(lastPt.current.x, lastPt.current.y);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-    ctx.restore();
-    lastPt.current = { x, y };
+    const active = dragRef.current;
+    if (!active) return;
+    const point = getPoint(e);
+
+    if (active.kind === "move") {
+      updateMarks(marksRef.current.map((mark) => {
+        if (mark.id !== active.id || (mark.type !== "O" && mark.type !== "X")) return mark;
+        return { ...mark, x: point.x, y: point.y };
+      }));
+      return;
+    }
+
+    if (active.kind === "draw") {
+      active.points = [...active.points, point];
+      draftRef.current = { id: "draft", type: "draw", points: active.points };
+      redraw();
+      return;
+    }
+
+    active.to = point;
+    draftRef.current = { id: "draft", type: active.type, from: active.from, to: active.to };
+    redraw();
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
     e.preventDefault();
-    isDrawing.current = false;
-    lastPt.current = null;
+    const active = dragRef.current;
+    dragRef.current = null;
+
+    if (active?.kind === "draw" && active.points.length > 1) {
+      updateMarks([...marksRef.current, { id: nid(), type: "draw", points: active.points }]);
+    }
+
+    if (active?.kind === "arrow") {
+      const distance = Math.hypot(active.to.x - active.from.x, active.to.y - active.from.y);
+      if (distance > 0.015) {
+        updateMarks([...marksRef.current, { id: nid(), type: active.type, from: active.from, to: active.to }]);
+      }
+    }
+
+    draftRef.current = null;
+    redraw(null);
   }
 
   function clearBoard() {
-    const canvas = canvasRef.current;
-    const ctx = ctxRef.current;
-    if (!canvas || !ctx) return;
-    drawCourt(ctx, canvas.width, canvas.height);
-    setSections(null);
+    dragRef.current = null;
+    draftRef.current = null;
+    updateMarks([]);
   }
 
   async function askAxis() {
     if (!query.trim() || analyzing) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
+
     setAnalyzing(true);
-    setSections(null);
-    const imageData = canvas.toDataURL("image/jpeg", 0.85);
+    redraw(null);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const imageData = canvas.toDataURL("image/jpeg", 0.88);
+
     try {
       const res = await fetch("/api/axis/board/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note: query.trim(), imageData }),
+        body: JSON.stringify({
+          note: query.trim(),
+          imageData,
+          boardMarks,
+        }),
       });
       const data = await res.json().catch(() => null) as { sections?: CoachingSection[] } | null;
       if (data?.sections) setSections(data.sections);
-    } catch {}
-    setAnalyzing(false);
+    } catch {
+      // Keep the existing board and answer visible if the request fails.
+    } finally {
+      setAnalyzing(false);
+    }
   }
 
   return (
     <main className="root">
       <header className="header">
-        <h1 className="title">Draw it. Ask Axis.</h1>
-        <p className="sub">Use the court like a whiteboard. Axis helps you reason through the play.</p>
+        <h1 className="title">Draw the play. Find the solution.</h1>
+        <p className="sub">{describeMarks(boardMarks)}</p>
       </header>
 
-      <div className={`canvas-wrap canvas-wrap--${mode}`} ref={wrapRef}>
+      <div className={`canvas-wrap canvas-wrap--${tool}`} ref={wrapRef}>
         <canvas
           ref={canvasRef}
           className="canvas"
@@ -253,30 +424,16 @@ export default function BoardPage() {
 
       <div className="bottom">
         <div className="tools-row">
-          <button
-            type="button"
-            className={`tool ${mode === "draw" ? "tool--on" : ""}`}
-            onClick={() => setMode("draw")}
-            aria-label="Freehand draw"
-          >
-            Draw
-          </button>
-          <button
-            type="button"
-            className={`tool tool--o ${mode === "O" ? "tool--on" : ""}`}
-            onClick={() => setMode("O")}
-            aria-label="Place offensive player"
-          >
-            O
-          </button>
-          <button
-            type="button"
-            className={`tool tool--x ${mode === "X" ? "tool--on" : ""}`}
-            onClick={() => setMode("X")}
-            aria-label="Place defender"
-          >
-            X
-          </button>
+          {TOOL_LABELS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`tool tool--${item.id} ${tool === item.id ? "tool--on" : ""}`}
+              onClick={() => setTool(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
           <div className="spacer" />
           <button type="button" className="clear" onClick={clearBoard}>Clear</button>
         </div>
@@ -307,10 +464,10 @@ export default function BoardPage() {
 
         {sections && (
           <div className="coaching">
-            {sections.map((s) => (
-              <div key={s.label} className="section">
-                <span className="section-label">{s.label}</span>
-                <span className="section-text">{s.text}</span>
+            {sections.map((section) => (
+              <div key={section.label} className="section">
+                <span className="section-label">{section.label}</span>
+                <span className="section-text">{section.text}</span>
               </div>
             ))}
           </div>
@@ -336,7 +493,7 @@ export default function BoardPage() {
         .title {
           font-size: 15px;
           font-weight: 700;
-          letter-spacing: -0.01em;
+          letter-spacing: 0;
           margin: 0 0 2px;
         }
 
@@ -355,6 +512,9 @@ export default function BoardPage() {
         .canvas-wrap--draw .canvas { cursor: crosshair; }
         .canvas-wrap--O .canvas,
         .canvas-wrap--X .canvas { cursor: cell; }
+        .canvas-wrap--move .canvas { cursor: grab; }
+        .canvas-wrap--pass .canvas,
+        .canvas-wrap--cut .canvas { cursor: alias; }
 
         .canvas {
           display: block;
@@ -375,26 +535,29 @@ export default function BoardPage() {
           border-bottom: 1px solid rgba(255,255,255,0.06);
           display: flex;
           gap: 6px;
+          overflow-x: auto;
           padding: 10px 16px;
         }
 
-        .tool {
+        .tool,
+        .clear {
           background: transparent;
           border: 1.5px solid rgba(255,255,255,0.12);
           border-radius: 6px;
-          color: rgba(255,255,255,0.45);
+          color: rgba(255,255,255,0.48);
           cursor: pointer;
+          flex-shrink: 0;
           font-family: inherit;
           font-size: 12px;
           font-weight: 700;
-          letter-spacing: 0.06em;
           min-height: 36px;
-          padding: 0 16px;
+          padding: 0 14px;
           text-transform: uppercase;
           transition: all 0.1s;
         }
 
-        .tool:hover { color: rgba(255,255,255,0.8); }
+        .tool:hover,
+        .clear:hover { color: rgba(255,255,255,0.8); }
 
         .tool--on {
           background: rgba(255,255,255,0.09);
@@ -402,31 +565,18 @@ export default function BoardPage() {
           color: #f4f4f0;
         }
 
-        .tool--o { color: rgba(74,158,255,0.7); border-color: rgba(74,158,255,0.2); }
-        .tool--o.tool--on { background: rgba(74,158,255,0.1); border-color: #4a9eff; color: #4a9eff; }
+        .tool--O { color: rgba(74,158,255,0.78); border-color: rgba(74,158,255,0.22); }
+        .tool--O.tool--on { background: rgba(74,158,255,0.1); border-color: #4a9eff; color: #4a9eff; }
 
-        .tool--x { color: rgba(255,107,74,0.7); border-color: rgba(255,107,74,0.2); }
-        .tool--x.tool--on { background: rgba(255,107,74,0.1); border-color: #ff6b4a; color: #ff6b4a; }
+        .tool--X { color: rgba(255,107,74,0.78); border-color: rgba(255,107,74,0.22); }
+        .tool--X.tool--on { background: rgba(255,107,74,0.1); border-color: #ff6b4a; color: #ff6b4a; }
 
-        .spacer { flex: 1; }
+        .spacer { flex: 1; min-width: 2px; }
 
         .clear {
-          background: transparent;
-          border: 1.5px solid rgba(255,255,255,0.09);
-          border-radius: 6px;
-          color: rgba(255,255,255,0.3);
-          cursor: pointer;
-          font-family: inherit;
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: 0.06em;
-          min-height: 36px;
-          padding: 0 16px;
-          text-transform: uppercase;
-          transition: all 0.1s;
+          border-color: rgba(255,255,255,0.09);
+          color: rgba(255,255,255,0.34);
         }
-
-        .clear:hover { color: rgba(255,255,255,0.65); }
 
         .query-row {
           display: flex;
@@ -490,7 +640,6 @@ export default function BoardPage() {
           color: rgba(255,255,255,0.32);
           font-size: 10px;
           font-weight: 700;
-          letter-spacing: 0.1em;
           text-transform: uppercase;
         }
 
@@ -498,6 +647,14 @@ export default function BoardPage() {
           color: #f4f4f0;
           font-size: 14px;
           line-height: 1.55;
+        }
+
+        @media (max-width: 640px) {
+          .header { padding-inline: 14px; }
+          .tools-row,
+          .query-row { padding-inline: 12px; }
+          .query-row { flex-direction: column; }
+          .ask { align-self: stretch; }
         }
       `}</style>
     </main>
