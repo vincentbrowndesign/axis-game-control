@@ -24,7 +24,7 @@ import type {
   ClipSourceQuality,
   ClipSourceType,
 } from "../src/lib/clip-room/types";
-import { waitForCloudflareMp4Download } from "../src/lib/cloudflare-stream";
+import { createOriginalClipSignedUrl } from "../src/lib/clip-room/original-storage";
 
 const WHAT_HAPPENED_QUESTION = "What happened in this clip?";
 
@@ -36,10 +36,14 @@ export const clipRoomProcessing = task({
     concurrencyLimit: 2,
   },
   run: async (payload: ClipProcessingPayload) => {
-    const { clipId, ownerId, cloudflareUid } = payload;
+    const { clipId, ownerId, cloudflareUid, originalStorageUri } = payload;
     let workDir: string | undefined;
 
-    console.log("CLIP_ROOM_PROCESSING_START", { clipId, cloudflareUid });
+    console.log("CLIP_ROOM_PROCESSING_START", {
+      clipId,
+      cloudflareUid,
+      originalSource: originalStorageUri ? "saved_original" : "missing",
+    });
 
     try {
       await updateClipSource(clipId, {
@@ -53,11 +57,24 @@ export const clipRoomProcessing = task({
       const setup = setupResult.record ?? null;
 
       // ── 1. Wait for Cloudflare MP4 ─────────────────────────────────────────
-      const mp4Url = await waitForCloudflareMp4Download(cloudflareUid);
-      console.log("CLIP_ROOM_MP4_READY", { clipId, mp4Url });
+      if (!originalStorageUri) {
+        throw new Error("Original MP4 is missing; analysis requires the saved upload source.");
+      }
+
+      const original = await createOriginalClipSignedUrl(originalStorageUri);
+      if (original.error || !original.url) {
+        throw new Error(`Original MP4 could not be opened for analysis: ${original.error ?? "missing signed URL"}`);
+      }
+
+      const analysisInput = original.url;
+      console.log("CLIP_ROOM_ORIGINAL_READY", {
+        clipId,
+        cloudflareUid,
+        analysisSource: "original_mp4",
+      });
 
       await updateClipSource(clipId, {
-        processingStage: "frame_extraction",
+        processingStage: "source_probe",
         processingProgress: 20,
       });
 
@@ -72,32 +89,23 @@ export const clipRoomProcessing = task({
       // Probe: 5 evenly distributed frames
       await extractAxisFrames({
         fps: 0.05, // ~1 frame per 20s, we'll take 5 from a short pass
-        inputPath: mp4Url,
+        inputPath: analysisInput,
         outputDir: probeDir,
         operationName: "CLIP_ROOM_PROBE_EXTRACTION",
       });
 
-      // All frames at 2fps for analysis
-      await extractAxisFrames({
-        fps: 2,
-        inputPath: mp4Url,
-        outputDir: framesDir,
-        operationName: "CLIP_ROOM_FRAME_EXTRACTION",
-      });
-
       const probeFiles = (await fs.readdir(probeDir)).filter((f) => f.endsWith(".jpg")).sort().slice(0, 5);
-      const frameFiles = (await fs.readdir(framesDir)).filter((f) => f.endsWith(".jpg")).sort();
 
-      console.log("CLIP_ROOM_FRAMES_EXTRACTED", {
+      console.log("CLIP_ROOM_PROBE_FRAMES_EXTRACTED", {
         clipId,
         probeFrames: probeFiles.length,
-        analysisFrames: frameFiles.length,
+        analysisSource: "original_mp4",
       });
 
       // ── 3. Probe video metadata ────────────────────────────────────────────
       let durationSeconds: number | null = null;
       try {
-        const meta = await probeAxisVideoMetadata(mp4Url);
+        const meta = await probeAxisVideoMetadata(analysisInput);
         durationSeconds = meta.duration;
         await updateClipSource(clipId, { durationSeconds });
       } catch { /* non-fatal */ }
@@ -152,7 +160,22 @@ export const clipRoomProcessing = task({
         return { ok: true, clipId, eventCount: 0, outcome: "poor_quality" };
       }
 
-      // ── 5. CV detection + tracking support ────────────────────────────────
+      // ── 5. Extract analysis frames + CV detection stage ────────────────────
+      await fs.mkdir(framesDir, { recursive: true });
+      await extractAxisFrames({
+        fps: 2,
+        inputPath: analysisInput,
+        outputDir: framesDir,
+        operationName: "CLIP_ROOM_ANALYSIS_EXTRACTION",
+      });
+      const frameFiles = (await fs.readdir(framesDir)).filter((f) => f.endsWith(".jpg")).sort();
+
+      console.log("CLIP_ROOM_FRAMES_EXTRACTED", {
+        clipId,
+        analysisFrames: frameFiles.length,
+        analysisSource: "original_mp4",
+      });
+
       await updateClipSource(clipId, {
         processingStage: "cv_detection",
         processingProgress: 34,
@@ -180,7 +203,7 @@ export const clipRoomProcessing = task({
 
       let audioAnalysis: ClipAudioAnalysis | null = null;
       try {
-        await extractAudio(mp4Url, audioPath);
+        await extractAudio(analysisInput, audioPath);
         audioAnalysis = await transcribeAudio(audioPath);
         console.log("CLIP_ROOM_AUDIO_TRANSCRIBED", { clipId, cueCount: audioAnalysis.cues.length });
       } catch (err) {
