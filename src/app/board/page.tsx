@@ -406,14 +406,22 @@ export default function BoardPage() {
 
   // Load from localStorage
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (!raw) return;
-      const s = JSON.parse(raw);
-      if (Array.isArray(s.objects)) setObjects(s.objects);
-      if (typeof s.note === "string") setNote(s.note);
-      if (s.readout) setReadout(s.readout);
-    } catch {}
+    let cancelled = false;
+
+    void Promise.resolve().then(() => {
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw || cancelled) return;
+        const s = JSON.parse(raw);
+        if (Array.isArray(s.objects)) setObjects(s.objects);
+        if (typeof s.note === "string") setNote(s.note);
+        if (s.readout) setReadout(s.readout);
+      } catch {}
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Keyboard shortcuts
@@ -514,7 +522,7 @@ export default function BoardPage() {
     }
   }
 
-  function onDoubleClick(e: React.MouseEvent<HTMLCanvasElement>) {
+  function onDoubleClick() {
     if (tool === "zone" && pendingPts.length >= 3) {
       setObjects((o) => [...o, { id: nid(), type: "zone", pts: pendingPts, color }]);
       setPendingPts([]);
@@ -558,7 +566,10 @@ export default function BoardPage() {
     <div className="bd-root">
       {/* Toolbar */}
       <div className="bd-toolbar">
-        <span className="bd-logo">Axis Board</span>
+        <div className="bd-brand">
+          <span className="bd-logo">Axis Board</span>
+          <span className="bd-sub">Draw the play. Find the solution.</span>
+        </div>
 
         <div className="bd-tools">
           {TOOL_DEFS.map((t) => (
@@ -709,13 +720,27 @@ export default function BoardPage() {
         }
         .bd-toolbar::-webkit-scrollbar { display: none; }
 
+        .bd-brand {
+          display: flex;
+          flex-direction: column;
+          flex-shrink: 0;
+          gap: 2px;
+          min-width: 118px;
+        }
+
         .bd-logo {
           color: rgba(255,255,255,0.5);
-          flex-shrink: 0;
           font-size: 12px;
           font-weight: 700;
           letter-spacing: 0.1em;
           text-transform: uppercase;
+        }
+
+        .bd-sub {
+          color: rgba(255,255,255,0.32);
+          font-size: 11px;
+          line-height: 1.15;
+          white-space: nowrap;
         }
 
         .bd-tools {
@@ -935,6 +960,8 @@ export default function BoardPage() {
         /* ── Mobile/iPad bottom panel ────────────────────────────── */
         @media (max-width: 768px) {
           .bd-body { flex-direction: column; }
+          .bd-brand { min-width: auto; }
+          .bd-sub { display: none; }
           .bd-panel {
             border-left: none;
             border-top: 1px solid rgba(255,255,255,0.08);
