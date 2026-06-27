@@ -4,6 +4,12 @@ import { AxisSurfaceHeader } from "./AxisSurfaceHeader";
 
 const tools = [
   {
+    title: "Clip Room",
+    purpose: "Record or upload a clip. Axis extracts activity, stats, and check plays.",
+    status: "Available",
+    href: "/axis/clip-room",
+  },
+  {
     title: "Build Map",
     purpose: "See what is active, locked, and next.",
     status: "Available",
