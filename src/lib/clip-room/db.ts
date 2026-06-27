@@ -7,10 +7,14 @@ import type {
   ClipPlay,
   ClipPressPack,
   ClipProof,
+  ClipResult,
+  ClipResultOutcome,
   ClipSetup,
   ClipShotZone,
   ClipSource,
+  ClipSourceQuality,
   ClipSourceStatus,
+  ClipSourceType,
   ClipStatLines,
 } from "./types";
 
@@ -107,6 +111,21 @@ export async function updateClipSource(clipId: string, update: Partial<{
 
   const { error } = await db.from("clip_sources").update(patch).eq("id", clipId);
   return { error: error?.message ?? null };
+}
+
+export async function getClipSourceByCloudflareUid(cloudflareUid: string) {
+  const db = getDb();
+  if (!db) return { error: "DB not configured", record: null };
+
+  const { data, error } = await db
+    .from("clip_sources")
+    .select()
+    .eq("cloudflare_uid", cloudflareUid)
+    .maybeSingle();
+
+  if (error) return { error: error.message, record: null };
+  if (!data) return { error: null, record: null };
+  return { error: null, record: rowToClipSource(data as Record<string, unknown>) };
 }
 
 export async function listClipSources(ownerId: string) {
@@ -448,4 +467,132 @@ export function emptyStats(): ClipStatLines {
     ftm: 0, fta: 0, ft_pct: null,
     reb: 0, ast: 0, stl: 0, blk: 0, to: 0, pf: 0,
   };
+}
+
+// ─── clip_results ────────────────────────────────────────────────────────────
+
+function rowToClipResult(row: Record<string, unknown>): ClipResult {
+  return {
+    id: row.id as string,
+    clipId: row.clip_id as string,
+    ownerId: row.owner_id as string,
+    isPlayable: (row.is_playable as boolean) ?? false,
+    sourceType: (row.source_type as ClipSourceType | null) ?? null,
+    courtVisible: (row.court_visible as boolean | null) ?? null,
+    hoopVisible: (row.hoop_visible as boolean | null) ?? null,
+    playersVisible: (row.players_visible as boolean | null) ?? null,
+    scoreboardVisible: (row.scoreboard_visible as boolean | null) ?? null,
+    actionWindowFound: (row.action_window_found as boolean | null) ?? null,
+    sourceQuality: (row.source_quality as ClipSourceQuality | null) ?? null,
+    probeNotes: (row.probe_notes as string | null) ?? null,
+    framesAnalyzed: (row.frames_analyzed as number) ?? 0,
+    scoreboardsRead: (row.scoreboards_read as number) ?? 0,
+    scoreChangesFound: (row.score_changes_found as number) ?? 0,
+    eventsDetected: (row.events_detected as number) ?? 0,
+    eventsCounted: (row.events_counted as number) ?? 0,
+    outcome: (row.outcome as ClipResultOutcome) ?? "pending",
+    outcomeReason: (row.outcome_reason as string | null) ?? null,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export async function createClipResult(record: {
+  clipId: string;
+  ownerId: string;
+  isPlayable?: boolean;
+  sourceType?: ClipSourceType | null;
+  courtVisible?: boolean | null;
+  hoopVisible?: boolean | null;
+  playersVisible?: boolean | null;
+  scoreboardVisible?: boolean | null;
+  actionWindowFound?: boolean | null;
+  sourceQuality?: ClipSourceQuality | null;
+  probeNotes?: string | null;
+  outcome?: ClipResultOutcome;
+  outcomeReason?: string | null;
+}) {
+  const db = getDb();
+  if (!db) return { error: "DB not configured", record: null };
+
+  const { data, error } = await db
+    .from("clip_results")
+    .upsert({
+      clip_id: record.clipId,
+      owner_id: record.ownerId,
+      is_playable: record.isPlayable ?? false,
+      source_type: record.sourceType ?? null,
+      court_visible: record.courtVisible ?? null,
+      hoop_visible: record.hoopVisible ?? null,
+      players_visible: record.playersVisible ?? null,
+      scoreboard_visible: record.scoreboardVisible ?? null,
+      action_window_found: record.actionWindowFound ?? null,
+      source_quality: record.sourceQuality ?? null,
+      probe_notes: record.probeNotes ?? null,
+      outcome: record.outcome ?? "pending",
+      outcome_reason: record.outcomeReason ?? null,
+    }, { onConflict: "clip_id" })
+    .select()
+    .single();
+
+  if (error || !data) return { error: error?.message ?? "insert failed", record: null };
+  return { error: null, record: rowToClipResult(data as Record<string, unknown>) };
+}
+
+export async function getClipResult(clipId: string) {
+  const db = getDb();
+  if (!db) return { error: "DB not configured", record: null };
+
+  const { data, error } = await db
+    .from("clip_results")
+    .select()
+    .eq("clip_id", clipId)
+    .maybeSingle();
+
+  if (error) return { error: error.message, record: null };
+  if (!data) return { error: null, record: null };
+  return { error: null, record: rowToClipResult(data as Record<string, unknown>) };
+}
+
+export async function updateClipResult(clipId: string, update: Partial<{
+  isPlayable: boolean;
+  sourceType: ClipSourceType | null;
+  courtVisible: boolean | null;
+  hoopVisible: boolean | null;
+  playersVisible: boolean | null;
+  scoreboardVisible: boolean | null;
+  actionWindowFound: boolean | null;
+  sourceQuality: ClipSourceQuality | null;
+  probeNotes: string | null;
+  framesAnalyzed: number;
+  scoreboardsRead: number;
+  scoreChangesFound: number;
+  eventsDetected: number;
+  eventsCounted: number;
+  outcome: ClipResultOutcome;
+  outcomeReason: string | null;
+}>) {
+  const db = getDb();
+  if (!db) return { error: "DB not configured" };
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (update.isPlayable !== undefined) patch.is_playable = update.isPlayable;
+  if (update.sourceType !== undefined) patch.source_type = update.sourceType;
+  if (update.courtVisible !== undefined) patch.court_visible = update.courtVisible;
+  if (update.hoopVisible !== undefined) patch.hoop_visible = update.hoopVisible;
+  if (update.playersVisible !== undefined) patch.players_visible = update.playersVisible;
+  if (update.scoreboardVisible !== undefined) patch.scoreboard_visible = update.scoreboardVisible;
+  if (update.actionWindowFound !== undefined) patch.action_window_found = update.actionWindowFound;
+  if (update.sourceQuality !== undefined) patch.source_quality = update.sourceQuality;
+  if (update.probeNotes !== undefined) patch.probe_notes = update.probeNotes;
+  if (update.framesAnalyzed !== undefined) patch.frames_analyzed = update.framesAnalyzed;
+  if (update.scoreboardsRead !== undefined) patch.scoreboards_read = update.scoreboardsRead;
+  if (update.scoreChangesFound !== undefined) patch.score_changes_found = update.scoreChangesFound;
+  if (update.eventsDetected !== undefined) patch.events_detected = update.eventsDetected;
+  if (update.eventsCounted !== undefined) patch.events_counted = update.eventsCounted;
+  if (update.outcome !== undefined) patch.outcome = update.outcome;
+  if (update.outcomeReason !== undefined) patch.outcome_reason = update.outcomeReason;
+
+  const { error } = await db.from("clip_results").update(patch).eq("clip_id", clipId);
+  return { error: error?.message ?? null };
 }

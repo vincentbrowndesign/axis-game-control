@@ -24,7 +24,8 @@ export type ClipProof =
   | "foul detected"
   | "block detected"
   | "steal detected"
-  | "audio cue";
+  | "audio cue"
+  | "user marked";
 
 // ─── Event types ──────────────────────────────────────────────────────────────
 
@@ -204,5 +205,34 @@ export type ClipProcessingPayload = {
   clipId: string;
   ownerId: string;
   cloudflareUid: string;
-  setup: ClipSetup | null;
+};
+
+// ─── Source probe + clip result ───────────────────────────────────────────────
+
+export type ClipSourceType = "raw_game" | "screen_recording" | "gallery_playback" | "unknown";
+export type ClipSourceQuality = "good" | "fair" | "poor" | "unusable";
+export type ClipResultOutcome = "pending" | "success" | "no_events" | "poor_quality" | "failed";
+
+export type ClipResult = {
+  id: string;
+  clipId: string;
+  ownerId: string;
+  isPlayable: boolean;
+  sourceType: ClipSourceType | null;
+  courtVisible: boolean | null;
+  hoopVisible: boolean | null;
+  playersVisible: boolean | null;
+  scoreboardVisible: boolean | null;
+  actionWindowFound: boolean | null;
+  sourceQuality: ClipSourceQuality | null;
+  probeNotes: string | null;
+  framesAnalyzed: number;
+  scoreboardsRead: number;
+  scoreChangesFound: number;
+  eventsDetected: number;
+  eventsCounted: number;
+  outcome: ClipResultOutcome;
+  outcomeReason: string | null;
+  createdAt: string;
+  updatedAt: string;
 };

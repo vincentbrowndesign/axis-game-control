@@ -9,20 +9,29 @@ import type {
   ClipEvent,
   ClipPlay,
   ClipPressPack,
+  ClipResult,
   ClipSource,
   ClipStatLines,
 } from "../../lib/clip-room/types";
 
 type Tab = "activity" | "stats" | "check-plays" | "press-pack";
 
+const WHAT_HAPPENED_QUESTION = "What happened in this clip?";
+
 const PROCESSING_STAGES = [
   "Source saved",
-  "Clip setup saved",
-  "Video uploaded",
-  "Axis reading clip",
-  "Activity building",
-  "Stats calculating",
-  "Press Pack generating",
+  "Stream ready",
+  "Source Probe",
+  "Frame extraction",
+  "CV detection",
+  "Tracking",
+  "OCR/audio/pose",
+  "Basketball rules",
+  "Confidence gate",
+  "Activity",
+  "Stats",
+  "Check Plays",
+  "Press Pack",
 ];
 
 function getStageStatuses(
@@ -33,15 +42,27 @@ function getStageStatuses(
   if (status === "failed") return ["done", "done", "done", "pending", "pending", "pending", "pending"];
 
   const stageMap: Record<string, number> = {
-    queued: 3,
-    waiting_for_video: 3,
+    queued: 1,
+    waiting_for_video: 1,
+    source_probe: 2,
+    probe: 2,
+    frame_extraction: 3,
     extracting_frames: 3,
-    extracting_audio: 3,
-    analyzing_frames: 4,
-    applying_basketball_logic: 4,
-    creating_check_plays: 5,
-    generating_press_pack: 6,
-    complete: 7,
+    cv_detection: 4,
+    tracking: 5,
+    ocr_audio_pose: 6,
+    extracting_audio: 6,
+    scoreboard_ocr: 6,
+    basketball_rules_engine: 7,
+    applying_basketball_logic: 7,
+    confidence_gate: 8,
+    activity: 9,
+    stats: 10,
+    check_plays: 11,
+    creating_check_plays: 11,
+    press_pack: 12,
+    generating_press_pack: 12,
+    complete: 13,
   };
 
   const active = processingStage ? (stageMap[processingStage] ?? 3) : 3;
@@ -60,6 +81,7 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
   const [stats, setStats] = useState<ClipStatLines | null>(null);
   const [plays, setPlays] = useState<ClipPlay[]>([]);
   const [pressPack, setPressPack] = useState<ClipPressPack | null>(null);
+  const [result, setResult] = useState<ClipResult | null>(null);
   const [loading, setLoading] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -74,11 +96,12 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
 
   const fetchAll = useCallback(async () => {
     if (auth.status !== "signed_in") return;
-    const [evRes, stRes, plRes, ppRes] = await Promise.all([
+    const [evRes, stRes, plRes, ppRes, resRes] = await Promise.all([
       axisAuthenticatedFetch(`/api/clip-room/${clipId}/activity`).catch(() => null),
       axisAuthenticatedFetch(`/api/clip-room/${clipId}/stats`).catch(() => null),
       axisAuthenticatedFetch(`/api/clip-room/${clipId}/plays`).catch(() => null),
       axisAuthenticatedFetch(`/api/clip-room/${clipId}/press-pack`).catch(() => null),
+      axisAuthenticatedFetch(`/api/clip-room/${clipId}/result`).catch(() => null),
     ]);
 
     if (evRes?.ok) {
@@ -97,16 +120,30 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
       const d = await ppRes.json().catch(() => null);
       if (d?.pressPack) setPressPack(d.pressPack);
     }
+    if (resRes?.ok) {
+      const d = await resRes.json().catch(() => null);
+      if (d?.result) setResult(d.result);
+    }
   }, [auth.status, clipId]);
 
   useEffect(() => {
     if (auth.status !== "signed_in") return;
+    let cancelled = false;
 
-    setLoading(true);
-    Promise.all([fetchSource(), fetchAll()]).finally(() => setLoading(false));
+    void Promise.resolve()
+      .then(() => {
+        if (!cancelled) setLoading(true);
+        return Promise.all([fetchSource(), fetchAll()]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [auth.status, clipId, fetchSource, fetchAll]);
 
-  // Poll while processing
   useEffect(() => {
     if (!source) return;
     if (source.status === "ready" || source.status === "failed") {
@@ -123,7 +160,7 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
     }, 4000);
 
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [source?.status, fetchSource, fetchAll]);
+  }, [source, source?.status, fetchSource, fetchAll]);
 
   async function resolvePlay(playId: string, resolution: string) {
     const res = await axisAuthenticatedFetch(`/api/clip-room/plays/${playId}`, {
@@ -133,18 +170,19 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
     }).catch(() => null);
     if (!res?.ok) return;
     const data = await res.json().catch(() => null);
-    setPlays((prev) => prev.map((p) => p.id === playId ? { ...p, status: "resolved", resolution } : p));
     if (data?.stats) setStats(data.stats);
     await fetchAll();
   }
 
   const pendingPlays = plays.filter((p) => p.status === "pending");
+  const regularPendingPlays = pendingPlays.filter((p) => p.question !== WHAT_HAPPENED_QUESTION);
   const isProcessing = source
     ? source.status !== "ready" && source.status !== "failed"
     : false;
   const stageStatuses = source
     ? getStageStatuses(source.processingStage, source.status)
     : null;
+  const hasCountedEvents = events.some((e) => e.status === "counted");
 
   return (
     <div className="crd-root">
@@ -183,7 +221,7 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
         {([
           ["activity", "Activity"],
           ["stats", "Stats"],
-          ["check-plays", pendingPlays.length > 0 ? `Check Plays (${pendingPlays.length})` : "Check Plays"],
+          ["check-plays", regularPendingPlays.length > 0 ? `Check Plays (${regularPendingPlays.length})` : "Check Plays"],
           ["press-pack", "Press Pack"],
         ] as [Tab, string][]).map(([tab, label]) => (
           <button
@@ -201,16 +239,25 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
         {loading && <p className="crd-muted">Loading...</p>}
 
         {!loading && activeTab === "activity" && (
-          <ActivityTab events={events} isProcessing={isProcessing} />
+          <ActivityTab
+            events={events}
+            plays={plays}
+            result={result}
+            isProcessing={isProcessing}
+            onResolve={resolvePlay}
+          />
         )}
         {!loading && activeTab === "stats" && (
-          <StatsTab stats={stats} isProcessing={isProcessing} />
+          <StatsTab stats={stats} hasCountedEvents={hasCountedEvents} isProcessing={isProcessing} />
         )}
         {!loading && activeTab === "check-plays" && (
-          <CheckPlaysTab plays={plays} onResolve={resolvePlay} />
+          <CheckPlaysTab
+            plays={plays.filter((p) => p.question !== WHAT_HAPPENED_QUESTION)}
+            onResolve={resolvePlay}
+          />
         )}
         {!loading && activeTab === "press-pack" && (
-          <PressPackTab pressPack={pressPack} stats={stats} isProcessing={isProcessing} hasActivity={events.length > 0} />
+          <PressPackTab pressPack={pressPack} stats={stats} isProcessing={isProcessing} />
         )}
       </main>
 
@@ -359,14 +406,167 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
 
 // ─── Activity Tab ─────────────────────────────────────────────────────────────
 
-function ActivityTab({ events, isProcessing }: { events: ClipEvent[]; isProcessing: boolean }) {
-  if (events.length === 0) {
-    const message = isProcessing
-      ? "Axis is reading the clip. Activity will appear when stat events are found."
-      : "No stat events found. This may be a short clip, still image, or non-game video.";
+const WHAT_HAPPENED_OPTIONS = [
+  { label: "Made 2", resolution: "made_2" },
+  { label: "Made 3", resolution: "made_3" },
+  { label: "Miss", resolution: "miss" },
+  { label: "Rebound", resolution: "rebound" },
+  { label: "Turnover", resolution: "turnover" },
+  { label: "Assist", resolution: "assist" },
+  { label: "Skip", resolution: "skip" },
+];
+
+function ActivityTab({
+  events,
+  plays,
+  result,
+  isProcessing,
+  onResolve,
+}: {
+  events: ClipEvent[];
+  plays: ClipPlay[];
+  result: ClipResult | null;
+  isProcessing: boolean;
+  onResolve: (playId: string, resolution: string) => Promise<void>;
+}) {
+  const [resolving, setResolving] = useState<string | null>(null);
+
+  const whatHappenedPlay = plays.find(
+    (p) => p.question === WHAT_HAPPENED_QUESTION && p.status === "pending",
+  );
+  const whatHappenedResolved = plays.find(
+    (p) => p.question === WHAT_HAPPENED_QUESTION && p.status === "resolved",
+  );
+
+  async function handleWhatHappened(playId: string, resolution: string) {
+    setResolving(resolution);
+    await onResolve(playId, resolution).catch(() => null);
+    setResolving(null);
+  }
+
+  if (isProcessing && events.length === 0) {
     return (
       <div className="act-empty">
-        <p className="act-empty-msg">{message}</p>
+        <p className="act-empty-msg">Axis is reading the clip. Activity will appear after Axis counts or creates a Check Play.</p>
+        <style jsx>{`.act-empty { display: flex; flex-direction: column; gap: 6px; } .act-empty-msg { color: var(--axis-muted); font-size: 14px; line-height: 1.5; margin: 0; max-width: 40ch; }`}</style>
+      </div>
+    );
+  }
+
+  if (events.length === 0 && !isProcessing) {
+    return (
+      <div className="act-no-events">
+        {result && (
+          <div className="act-probe-card">
+            <p className="act-probe-title">Source Probe</p>
+            <div className="act-probe-grid">
+              <span className="act-probe-item">
+                <span className={result.isPlayable ? "act-probe-yes" : "act-probe-no"}>
+                  {result.isPlayable ? "yes" : "no"}
+                </span>
+                Playable video
+              </span>
+              <span className="act-probe-item">
+                <span className="act-probe-neutral">{sourceTypeLabel(result.sourceType)}</span>
+                Source type
+              </span>
+              <span className="act-probe-item">
+                <span className={result.courtVisible ? "act-probe-yes" : "act-probe-no"}>
+                  {result.courtVisible ? "✓" : "✗"}
+                </span>
+                Court visible
+              </span>
+              <span className="act-probe-item">
+                <span className={result.hoopVisible ? "act-probe-yes" : "act-probe-no"}>
+                  {result.hoopVisible ? "yes" : "no"}
+                </span>
+                Hoop visible
+              </span>
+              <span className="act-probe-item">
+                <span className={result.playersVisible ? "act-probe-yes" : "act-probe-no"}>
+                  {result.playersVisible ? "✓" : "✗"}
+                </span>
+                Players visible
+              </span>
+              <span className="act-probe-item">
+                <span className={result.scoreboardVisible ? "act-probe-yes" : "act-probe-no"}>
+                  {result.scoreboardVisible ? "✓" : "✗"}
+                </span>
+                Scoreboard
+              </span>
+              <span className="act-probe-item">
+                <span className={result.actionWindowFound ? "act-probe-yes" : "act-probe-no"}>
+                  {result.actionWindowFound ? "✓" : "✗"}
+                </span>
+                Action found
+              </span>
+            </div>
+            {result.sourceQuality && (
+              <p className="act-probe-quality">Quality: <strong>{result.sourceQuality}</strong></p>
+            )}
+            {result.probeNotes && (
+              <p className="act-probe-notes">{result.probeNotes}</p>
+            )}
+          </div>
+        )}
+
+        {whatHappenedPlay && (
+          <div className="act-what-card">
+            <p className="act-what-q">{whatHappenedPlay.question}</p>
+            {whatHappenedPlay.context && (
+              <p className="act-what-ctx">{whatHappenedPlay.context}</p>
+            )}
+            <div className="act-what-btns">
+              {WHAT_HAPPENED_OPTIONS.map(({ label, resolution }) => (
+                <button
+                  key={resolution}
+                  type="button"
+                  className={`act-what-btn ${resolution === "skip" ? "act-what-btn--skip" : "act-what-btn--primary"}`}
+                  disabled={resolving !== null}
+                  onClick={() => void handleWhatHappened(whatHappenedPlay.id, resolution)}
+                >
+                  {resolving === resolution ? "..." : label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!whatHappenedPlay && whatHappenedResolved && (
+          <p className="act-resolved-note">
+            Marked as: <strong>{whatHappenedResolved.resolution?.replace(/_/g, " ")}</strong>
+          </p>
+        )}
+
+        {!whatHappenedPlay && !whatHappenedResolved && (
+          <p className="act-empty-msg">Clip Result created. Check Plays will appear when Axis needs a manual mark.</p>
+        )}
+
+        <style jsx>{`
+          .act-no-events { display: flex; flex-direction: column; gap: 16px; max-width: 520px; }
+          .act-probe-card { background: rgba(255,255,255,0.04); border: 1px solid var(--axis-line); border-radius: 10px; display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+          .act-probe-title { color: var(--axis-muted); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; margin: 0; text-transform: uppercase; }
+          .act-probe-grid { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+          .act-probe-item { align-items: center; color: var(--axis-muted); display: flex; font-size: 12px; gap: 6px; }
+          .act-probe-yes { color: var(--axis-live); font-size: 11px; }
+          .act-probe-no { color: rgba(244,244,240,0.3); font-size: 11px; }
+          .act-probe-neutral { color: var(--axis-ink); font-size: 11px; font-weight: 700; text-transform: capitalize; }
+          .act-probe-quality { color: var(--axis-muted); font-size: 12px; margin: 0; }
+          .act-probe-quality strong { color: var(--axis-ink); }
+          .act-probe-notes { color: var(--axis-muted); font-size: 12px; line-height: 1.45; margin: 0; }
+          .act-what-card { border: 1px solid var(--axis-line); border-radius: 10px; display: flex; flex-direction: column; gap: 10px; padding: 14px; }
+          .act-what-q { font-size: 15px; font-weight: 600; margin: 0; }
+          .act-what-ctx { color: var(--axis-muted); font-size: 12px; margin: 0; }
+          .act-what-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+          .act-what-btn { border: 1px solid var(--axis-line); border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700; min-height: 36px; padding: 0 14px; transition: all 0.12s; }
+          .act-what-btn:disabled { cursor: default; opacity: 0.4; }
+          .act-what-btn--primary { background: rgba(255,255,255,0.06); color: var(--axis-ink); }
+          .act-what-btn--primary:hover:not(:disabled) { background: rgba(255,255,255,0.12); }
+          .act-what-btn--skip { background: transparent; color: var(--axis-muted); }
+          .act-resolved-note { color: var(--axis-muted); font-size: 14px; margin: 0; }
+          .act-resolved-note strong { color: var(--axis-ink); text-transform: capitalize; }
+          .act-empty-msg { color: var(--axis-muted); font-size: 14px; line-height: 1.5; margin: 0; max-width: 40ch; }
+        `}</style>
       </div>
     );
   }
@@ -394,8 +594,6 @@ function ActivityTab({ events, isProcessing }: { events: ClipEvent[]; isProcessi
       </div>
 
       <style jsx>{`
-        .act-empty { display: flex; flex-direction: column; gap: 6px; }
-        .act-empty-msg { color: var(--axis-muted); font-size: 14px; line-height: 1.5; margin: 0; max-width: 40ch; }
         .act-root { display: flex; flex-direction: column; gap: 2px; max-width: 560px; }
         .act-list { display: flex; flex-direction: column; gap: 1px; }
         .act-row { align-items: center; border-radius: 8px; display: flex; gap: 10px; min-height: 46px; padding: 8px 10px; }
@@ -421,18 +619,27 @@ function ActivityTab({ events, isProcessing }: { events: ClipEvent[]; isProcessi
 
 // ─── Stats Tab ────────────────────────────────────────────────────────────────
 
-function StatsTab({ stats, isProcessing }: { stats: ClipStatLines | null; isProcessing: boolean }) {
-  if (isProcessing || !stats) {
+function StatsTab({
+  stats,
+  hasCountedEvents,
+  isProcessing,
+}: {
+  stats: ClipStatLines | null;
+  hasCountedEvents: boolean;
+  isProcessing: boolean;
+}) {
+  if (isProcessing || !hasCountedEvents) {
     return (
       <>
-        <p className="st-waiting">Stats waiting on Activity.</p>
-        <style jsx>{`.st-waiting { color: var(--axis-muted); font-size: 13px; margin: 0; }`}</style>
+        <p className="st-waiting">Stats will appear after Axis counts or you mark the play.</p>
+        <style jsx>{`.st-waiting { color: var(--axis-muted); font-size: 13px; line-height: 1.5; margin: 0; max-width: 44ch; }`}</style>
       </>
     );
   }
 
+  if (!stats) return null;
+
   const rows: Array<{ label: string; value: string | number }> = [
-    { label: "PTS", value: stats.pts },
     { label: "FGM/FGA", value: stats.fga > 0 ? `${stats.fgm}/${stats.fga}` : "—" },
     { label: "FG%", value: stats.fg_pct !== null ? `${stats.fg_pct}%` : "—" },
     { label: "3PM/3PA", value: stats.tpa > 0 ? `${stats.tpm}/${stats.tpa}` : "—" },
@@ -452,7 +659,7 @@ function StatsTab({ stats, isProcessing }: { stats: ClipStatLines | null; isProc
       <div className="st-pts">{stats.pts}</div>
       <div className="st-pts-label">Points</div>
       <div className="st-grid">
-        {rows.slice(1).map((row) => (
+        {rows.map((row) => (
           <div key={row.label} className="st-cell">
             <span className="st-val">{row.value}</span>
             <span className="st-key">{row.label}</span>
@@ -474,6 +681,7 @@ function StatsTab({ stats, isProcessing }: { stats: ClipStatLines | null; isProc
 }
 
 // ─── Check Plays Tab ──────────────────────────────────────────────────────────
+// Shows only regular check plays (not "What happened?" — those are in Activity tab)
 
 function CheckPlaysTab({
   plays,
@@ -590,14 +798,21 @@ function PressPackTab({
   pressPack,
   stats,
   isProcessing,
-  hasActivity,
 }: {
   pressPack: ClipPressPack | null;
   stats: ClipStatLines | null;
   isProcessing: boolean;
-  hasActivity: boolean;
 }) {
-  if (!pressPack && (isProcessing || !hasActivity)) {
+  if (isProcessing && !pressPack) {
+    return (
+      <>
+        <p className="pp-waiting">Press Pack generating...</p>
+        <style jsx>{`.pp-waiting { color: var(--axis-muted); font-size: 13px; line-height: 1.5; margin: 0; }`}</style>
+      </>
+    );
+  }
+
+  if (!pressPack) {
     return (
       <>
         <p className="pp-waiting">Press Pack will generate after Activity is created.</p>
@@ -606,18 +821,18 @@ function PressPackTab({
     );
   }
 
-  const s = stats ?? pressPack?.statLines;
+  const s = stats ?? pressPack.statLines;
   const statLine = s && s.pts > 0
     ? `${s.pts} PTS · ${s.fgm}/${s.fga} FG · ${s.reb} REB · ${s.ast} AST`
     : null;
 
   return (
     <div className="pp-root">
-      {pressPack?.headline && <h2 className="pp-headline">{pressPack.headline}</h2>}
+      {pressPack.headline && <h2 className="pp-headline">{pressPack.headline}</h2>}
       {statLine && <p className="pp-statline">{statLine}</p>}
-      {pressPack?.summary && <p className="pp-summary">{pressPack.summary}</p>}
+      {pressPack.summary && <p className="pp-summary">{pressPack.summary}</p>}
 
-      {pressPack?.keyMoments && pressPack.keyMoments.length > 0 && (
+      {pressPack.keyMoments && pressPack.keyMoments.length > 0 && (
         <div className="pp-moments">
           <p className="pp-moments-label">Key Moments</p>
           {pressPack.keyMoments.map((m, i) => (
@@ -627,10 +842,6 @@ function PressPackTab({
             </div>
           ))}
         </div>
-      )}
-
-      {!pressPack?.headline && !pressPack?.summary && (
-        <p className="pp-muted">Press Pack will generate after Activity is created.</p>
       )}
 
       <style jsx>{`
@@ -643,7 +854,6 @@ function PressPackTab({
         .pp-moment { align-items: baseline; display: flex; gap: 10px; }
         .pp-moment-time { color: var(--axis-muted); flex-shrink: 0; font-size: 11px; font-weight: 600; width: 42px; }
         .pp-moment-desc { font-size: 13px; }
-        .pp-muted { color: var(--axis-muted); font-size: 13px; margin: 0; }
       `}</style>
     </div>
   );
@@ -659,6 +869,13 @@ function formatTime(seconds: number) {
 
 function statusLabel(status: ClipEvent["status"]) {
   return { counted: "Counted", suggested: "Suggested", check: "Check", skipped: "Skipped" }[status] ?? status;
+}
+
+function sourceTypeLabel(sourceType: ClipResult["sourceType"]) {
+  if (sourceType === "raw_game") return "Raw game video";
+  if (sourceType === "screen_recording") return "Screen recording";
+  if (sourceType === "gallery_playback") return "Gallery playback";
+  return "Unknown";
 }
 
 function eventLabel(type: string, shotZone: string | null, points: number) {

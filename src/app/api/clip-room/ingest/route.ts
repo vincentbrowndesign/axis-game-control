@@ -1,10 +1,9 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { tasks } from "@trigger.dev/sdk/v3";
 
 import { getAxisRequestUser } from "../../../../lib/axis-request-auth";
-import { createClipSource, getClipSetup, updateClipSource, upsertClipSetup } from "../../../../lib/clip-room/db";
+import { createClipResult, createClipSource, upsertClipSetup } from "../../../../lib/clip-room/db";
 import { uploadCloudflareStreamVideoFile } from "../../../../lib/cloudflare-stream";
 
 export const runtime = "nodejs";
@@ -89,26 +88,16 @@ export async function POST(request: Request) {
       scoreboardVisible: validScoreboard,
     });
 
-    // Start processing
-    const setup = await getClipSetup(clipId);
-    try {
-      await tasks.trigger("clip-room-processing", {
-        clipId,
-        ownerId: auth.userId,
-        cloudflareUid,
-        setup: setup.record ?? null,
-      });
-      await updateClipSource(clipId, {
-        status: "processing",
-        processingStage: "queued",
-        processingProgress: 8,
-      });
-    } catch (triggerErr) {
-      console.error("CLIP_INGEST_TRIGGER_ERROR", { error: String(triggerErr), clipId });
-      // Non-fatal: clip source exists, user can still see the detail page
-      await updateClipSource(clipId, { status: "uploaded" });
-    }
+    // Create the result shell now, but do not analyze until the Stream-ready webhook fires.
+    await createClipResult({
+      clipId,
+      ownerId: auth.userId,
+      isPlayable: false,
+      outcome: "pending",
+      outcomeReason: "Waiting for Cloudflare Stream to finish processing.",
+    });
 
+    // Processing is triggered by the Cloudflare Stream webhook when the video is ready.
     return Response.json({ clipId }, { status: 201 });
 
   } catch (err) {

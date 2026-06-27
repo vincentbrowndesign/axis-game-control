@@ -1,10 +1,13 @@
 import { tasks } from "@trigger.dev/sdk/v3";
 import { getAxisVideoJobByCloudflareUid, updateAxisVideoJob } from "../../../../lib/axis-video-jobs";
+import { getClipSourceByCloudflareUid, updateClipSource } from "../../../../lib/clip-room/db";
 
 export const runtime = "nodejs";
 
 const axisVideoTriggerTtl = "30m";
 const axisVideoTriggerQueue = "axis-video-processing";
+const clipRoomTriggerTtl = "30m";
+const clipRoomTriggerQueue = "clip-room-processing";
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
@@ -18,11 +21,50 @@ export async function POST(request: Request) {
   const cloudflareUid = getWebhookUid(payload);
   if (!cloudflareUid) return Response.json({ error: "Cloudflare Stream uid missing." }, { status: 400 });
 
+  const isReady = isReadyPayload(payload);
+
+  // ── Clip Room: clip_sources lookup ──────────────────────────────────────────
+  const clipSource = await getClipSourceByCloudflareUid(cloudflareUid);
+  if (clipSource.record && !isReady) {
+    return Response.json({
+      received: true,
+      matched: true,
+      product: "clip-room",
+      clipId: clipSource.record.id,
+      ready: false,
+    });
+  }
+
+  if (clipSource.record && isReady && clipSource.record.status === "uploaded") {
+    const src = clipSource.record;
+    try {
+      const handle = await tasks.trigger("clip-room-processing", {
+        clipId: src.id,
+        ownerId: src.ownerId,
+        cloudflareUid,
+      }, {
+        queue: clipRoomTriggerQueue,
+        ttl: clipRoomTriggerTtl,
+      });
+      console.log("CLIP_ROOM_TRIGGER_CREATED", { clipId: src.id, cloudflareUid, triggerRunId: handle.id });
+      await updateClipSource(src.id, {
+        status: "processing",
+        processingStage: "queued",
+        processingProgress: 5,
+      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.error("CLIP_ROOM_TRIGGER_FAILED", { clipId: src.id, cloudflareUid, reason });
+      await updateClipSource(src.id, { status: "failed", error: reason });
+    }
+    return Response.json({ received: true, matched: true, product: "clip-room", clipId: src.id });
+  }
+
+  // ── Axis video processing: axis_video_jobs lookup ────────────────────────────
   const job = await getAxisVideoJobByCloudflareUid(cloudflareUid);
   if (job.error) return Response.json({ error: job.error }, { status: 502 });
   if (!job.record) return Response.json({ received: true, matched: false });
 
-  const isReady = isReadyPayload(payload);
   await updateAxisVideoJob(job.record.job_id, {
     error: null,
     progress: isReady ? 20 : 10,
