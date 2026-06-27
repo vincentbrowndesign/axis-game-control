@@ -9,7 +9,8 @@ import AxisAuthControl from "../../app/axis/axis-auth-control";
 import type { ClipScoreboardVisible, ClipSessionType, ClipSubjectType } from "../../lib/clip-room/types";
 
 type Props = { mode: "record" | "upload" };
-type Stage = "capture" | "setup" | "uploading" | "done";
+type Stage = "capture" | "setup" | "done";
+type UploadStatus = "idle" | "uploading" | "uploaded" | "failed";
 
 type SetupFields = {
   subjectType: ClipSubjectType;
@@ -17,6 +18,14 @@ type SetupFields = {
   sessionType: ClipSessionType;
   jerseyColor: string;
   scoreboardVisible: ClipScoreboardVisible | "";
+};
+
+type UploadedClip = {
+  clipSourceId: string | null;
+  fileName: string;
+  fileSize: number;
+  streamVideoId: string | null;
+  uploadStatus: UploadStatus;
 };
 
 const defaultSetup: SetupFields = {
@@ -32,39 +41,88 @@ export function ClipRoomNew({ mode }: Props) {
   const router = useRouter();
 
   const [stage, setStage] = useState<Stage>("capture");
-  const [file, setFile] = useState<File | null>(null);
+  const [clip, setClip] = useState<UploadedClip | null>(null);
   const [setup, setSetup] = useState<SetupFields>(defaultSetup);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  function handleCaptureDone(f: File) {
-    setFile(f);
-    setStage("setup");
-  }
-
-  async function handleStartProcessing() {
-    if (!file) { setError("Upload could not start. Please choose a video and try again."); return; }
-    if (auth.status !== "signed_in") return;
-
-    setStage("uploading");
+  function handleCaptureDone(file: File) {
+    const nextClip: UploadedClip = {
+      clipSourceId: null,
+      fileName: file.name || "clip.mp4",
+      fileSize: file.size,
+      streamVideoId: null,
+      uploadStatus: "uploading",
+    };
+    setClip(nextClip);
     setError(null);
     setUploadProgress(0);
+    setStage("setup");
+    void uploadVideo(file);
+  }
+
+  async function uploadVideo(file: File) {
+    if (auth.status !== "signed_in") {
+      setClip((current) => current ? { ...current, uploadStatus: "failed" } : current);
+      setError("Sign in to save and process this clip.");
+      return;
+    }
 
     try {
       const token = await getAxisAccessToken();
-      const clipId = await xhrFormDataPost(
+      const uploaded = await xhrVideoUpload(
         "/api/clip-room/ingest",
         file,
-        setup,
         mode,
         token,
         setUploadProgress,
       );
+      setClip({
+        clipSourceId: uploaded.clipSourceId,
+        fileName: uploaded.fileName || file.name || "clip.mp4",
+        fileSize: uploaded.fileSize || file.size,
+        streamVideoId: uploaded.streamVideoId,
+        uploadStatus: "uploaded",
+      });
       setUploadProgress(100);
-      setStage("done");
-      setTimeout(() => router.push(`/clips/${clipId}`), 600);
-    } catch (err) {
+    } catch {
+      setClip((current) => current ? { ...current, uploadStatus: "failed" } : current);
       setError("Upload could not start. Please choose a video and try again.");
+    }
+  }
+
+  function chooseAgain() {
+    setClip(null);
+    setError(null);
+    setUploadProgress(0);
+    setStage("capture");
+  }
+
+  async function handleStartProcessing() {
+    if (clip?.uploadStatus === "failed") {
+      chooseAgain();
+      return;
+    }
+    if (setup.subjectType === "team" && !setup.subjectName.trim()) {
+      setError("Enter a team name.");
+      return;
+    }
+    if (!clip?.clipSourceId) {
+      setError("Video upload did not complete. Please choose the video again.");
+      return;
+    }
+    if (auth.status !== "signed_in") return;
+
+    setError(null);
+
+    try {
+      const token = await getAxisAccessToken();
+      await saveSetup(clip.clipSourceId, setup, token);
+      await startProcessing(clip.clipSourceId, token);
+      setStage("done");
+      setTimeout(() => router.push(`/clips/${clip.clipSourceId}`), 600);
+    } catch {
+      setError("Processing could not start. Please try again.");
       setStage("setup");
     }
   }
@@ -88,23 +146,16 @@ export function ClipRoomNew({ mode }: Props) {
         )}
         {stage === "setup" && (
           <ClipSetupForm
-            file={file}
+            clip={clip}
             setup={setup}
             onChange={setSetup}
-            onBack={() => setStage("capture")}
+            onBack={chooseAgain}
+            onChooseAgain={chooseAgain}
             onSubmit={() => void handleStartProcessing()}
             error={error}
             authStatus={auth.status}
+            uploadProgress={uploadProgress}
           />
-        )}
-        {stage === "uploading" && (
-          <div className="crn-state">
-            <p className="crn-state-title">Uploading...</p>
-            <div className="crn-progress-track">
-              <div className="crn-progress-fill" style={{ width: `${uploadProgress}%` }} />
-            </div>
-            <p className="crn-muted">{uploadProgress}%</p>
-          </div>
         )}
         {stage === "done" && (
           <div className="crn-state">
@@ -359,30 +410,47 @@ function ClipRecorder({ onDone }: { onDone: (file: File) => void }) {
 // ─── Setup form ───────────────────────────────────────────────────────────────
 
 type SetupFormProps = {
-  file: File | null;
+  clip: UploadedClip | null;
   setup: SetupFields;
   onChange: (f: SetupFields) => void;
   onBack: () => void;
+  onChooseAgain: () => void;
   onSubmit: () => void;
   error: string | null;
   authStatus: string;
+  uploadProgress: number;
 };
 
-function ClipSetupForm({ file, setup, onChange, onBack, onSubmit, error, authStatus }: SetupFormProps) {
+function ClipSetupForm({ clip, setup, onChange, onBack, onChooseAgain, onSubmit, error, authStatus, uploadProgress }: SetupFormProps) {
   function set<K extends keyof SetupFields>(key: K, value: SetupFields[K]) {
     onChange({ ...setup, [key]: value });
   }
 
-  const canSubmit = authStatus === "signed_in" && file !== null;
+  const buttonLabel =
+    authStatus !== "signed_in"
+      ? "Sign in to continue"
+      : clip?.uploadStatus === "uploading"
+        ? "Uploading video..."
+        : clip?.uploadStatus === "failed"
+          ? "Choose Video Again"
+          : "Start Processing";
+  const canSubmit = authStatus === "signed_in" && clip?.uploadStatus !== "uploading";
 
   return (
     <div className="csf-root">
       <h2 className="csf-title">Clip Setup</h2>
 
-      {file && (
+      {clip && (
         <div className="csf-file">
-          <span className="csf-file-name">{file.name}</span>
-          <span className="csf-file-size">{formatBytes(file.size)}</span>
+          <span className="csf-file-name">{clip.fileName}</span>
+          <span className="csf-file-size">{formatBytes(clip.fileSize)}</span>
+          <span className={`csf-upload csf-upload--${clip.uploadStatus}`}>
+            {clip.uploadStatus === "uploading"
+              ? `Uploading video... ${uploadProgress}%`
+              : clip.uploadStatus === "uploaded"
+                ? "Upload complete"
+                : "Upload failed"}
+          </span>
         </div>
       )}
 
@@ -470,19 +538,23 @@ function ClipSetupForm({ file, setup, onChange, onBack, onSubmit, error, authSta
         <button
           type="button"
           className="csf-submit"
-          onClick={onSubmit}
+          onClick={clip?.uploadStatus === "failed" ? onChooseAgain : onSubmit}
           disabled={!canSubmit}
         >
-          {authStatus !== "signed_in" ? "Sign in to continue" : "Start Processing"}
+          {buttonLabel}
         </button>
       </div>
 
       <style jsx>{`
         .csf-root { display: flex; flex-direction: column; gap: 24px; max-width: 420px; width: 100%; }
         .csf-title { font-size: clamp(22px, 5vw, 32px); font-weight: 700; letter-spacing: -0.02em; margin: 0; }
-        .csf-file { align-items: baseline; display: flex; gap: 8px; }
+        .csf-file { align-items: baseline; display: flex; flex-wrap: wrap; gap: 8px; }
         .csf-file-name { color: var(--axis-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 28ch; }
         .csf-file-size { color: rgba(244,244,240,0.3); flex-shrink: 0; font-size: 11px; }
+        .csf-upload { flex-basis: 100%; font-size: 12px; }
+        .csf-upload--uploading { color: #f4c95d; }
+        .csf-upload--uploaded { color: var(--axis-live); }
+        .csf-upload--failed { color: #e77; }
         .csf-field { display: flex; flex-direction: column; gap: 8px; }
         .csf-label { color: var(--axis-muted); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
         .csf-optional { font-weight: 400; opacity: 0.7; }
@@ -504,23 +576,25 @@ function ClipSetupForm({ file, setup, onChange, onBack, onSubmit, error, authSta
 
 // ─── XHR upload with progress ────────────────────────────────────────────────
 
-function xhrFormDataPost(
+type UploadResponse = {
+  clipId?: string;
+  clipSourceId?: string;
+  fileName?: string;
+  fileSize?: number;
+  streamVideoId?: string;
+};
+
+function xhrVideoUpload(
   url: string,
   file: File,
-  setup: SetupFields,
   origin: "record" | "upload",
   token: string | null,
   onProgress: (pct: number) => void,
-): Promise<string> {
+): Promise<Required<Pick<UploadResponse, "clipSourceId" | "fileName" | "fileSize" | "streamVideoId">>> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
     form.append("video", file);
     form.append("origin", origin === "record" ? "recorded" : "uploaded");
-    form.append("subjectType", setup.subjectType);
-    form.append("subjectName", setup.subjectName);
-    form.append("sessionType", setup.sessionType);
-    form.append("jerseyColor", setup.jerseyColor);
-    form.append("scoreboardVisible", setup.scoreboardVisible);
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url);
@@ -528,18 +602,24 @@ function xhrFormDataPost(
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
-        onProgress(Math.round((e.loaded / e.total) * 90));
+        onProgress(Math.round((e.loaded / e.total) * 95));
       }
     };
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          const data = JSON.parse(xhr.responseText) as { clipId?: string };
-          if (data.clipId) {
-            resolve(data.clipId);
+          const data = JSON.parse(xhr.responseText) as UploadResponse;
+          const clipSourceId = data.clipSourceId ?? data.clipId;
+          if (clipSourceId) {
+            resolve({
+              clipSourceId,
+              fileName: data.fileName ?? file.name,
+              fileSize: data.fileSize ?? file.size,
+              streamVideoId: data.streamVideoId ?? "",
+            });
           } else {
-            reject(new Error("No clipId returned"));
+            reject(new Error("No clipSourceId returned"));
           }
         } catch {
           reject(new Error("Invalid response"));
@@ -560,6 +640,40 @@ function xhrFormDataPost(
 
     xhr.send(form);
   });
+}
+
+async function saveSetup(clipSourceId: string, setup: SetupFields, token: string | null) {
+  const response = await fetch(`/api/clip-room/${clipSourceId}/setup`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      subjectType: setup.subjectType,
+      subjectName: setup.subjectName,
+      sessionType: setup.sessionType,
+      jerseyColor: setup.jerseyColor,
+      scoreboardVisible: setup.scoreboardVisible || null,
+    }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(data?.error ?? "setup save failed");
+  }
+}
+
+async function startProcessing(clipSourceId: string, token: string | null) {
+  const response = await fetch(`/api/clip-room/sources/${clipSourceId}`, {
+    method: "PATCH",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(data?.error ?? "processing start failed");
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

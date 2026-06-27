@@ -19,6 +19,9 @@ export async function POST(request: Request, context: { params: Promise<{ clipId
   const subjectType = body.subjectType === "player" || body.subjectType === "team" ? body.subjectType : null;
   if (!subjectType) return Response.json({ error: "subjectType must be 'player' or 'team'" }, { status: 400 });
 
+  const subjectName = typeof body.subjectName === "string" ? body.subjectName.trim() : "";
+  if (subjectType === "team" && !subjectName) return Response.json({ error: "Enter a team name." }, { status: 400 });
+
   const sessionType = ["game", "practice", "training"].includes(body.sessionType) ? body.sessionType : null;
   if (!sessionType) return Response.json({ error: "sessionType must be 'game', 'practice', or 'training'" }, { status: 400 });
 
@@ -28,7 +31,7 @@ export async function POST(request: Request, context: { params: Promise<{ clipId
     clipId,
     ownerId: auth.userId,
     subjectType,
-    subjectName: typeof body.subjectName === "string" ? body.subjectName.trim() || null : null,
+    subjectName: subjectName || null,
     sessionType,
     jerseyColor: typeof body.jerseyColor === "string" ? body.jerseyColor.trim() || null : null,
     scoreboardVisible: scoreboardVisible && ["yes", "no", "not_sure"].includes(scoreboardVisible) ? scoreboardVisible : null,

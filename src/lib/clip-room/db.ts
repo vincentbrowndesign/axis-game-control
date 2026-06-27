@@ -52,6 +52,8 @@ export async function createClipSource(record: {
   filename: string;
   fileSize: number;
   cloudflareUid: string;
+  status?: ClipSourceStatus;
+  processingStage?: string | null;
   uploadUrl?: string | null;
   videoUrl?: string | null;
 }) {
@@ -68,7 +70,8 @@ export async function createClipSource(record: {
       cloudflare_uid: record.cloudflareUid,
       upload_url: record.uploadUrl ?? null,
       video_url: record.videoUrl ?? null,
-      status: "uploaded",
+      status: record.status ?? "uploaded",
+      processing_stage: record.processingStage ?? null,
       processing_progress: 0,
     })
     .select()

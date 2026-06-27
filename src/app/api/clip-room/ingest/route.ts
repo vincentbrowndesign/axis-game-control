@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { getAxisRequestUser } from "../../../../lib/axis-request-auth";
-import { createClipResult, createClipSource, upsertClipSetup } from "../../../../lib/clip-room/db";
+import { createClipResult, createClipSource } from "../../../../lib/clip-room/db";
 import { saveOriginalClipForAnalysis } from "../../../../lib/clip-room/original-storage";
 import { uploadCloudflareStreamVideoFile } from "../../../../lib/cloudflare-stream";
 
@@ -28,18 +28,6 @@ export async function POST(request: Request) {
 
   const origin = formData.get("origin");
   const validOrigin = origin === "recorded" || origin === "uploaded" ? origin : "uploaded";
-  const subjectType = formData.get("subjectType");
-  const validSubjectType = subjectType === "team" ? "team" : "player";
-  const subjectName = getString(formData.get("subjectName"));
-  const sessionType = formData.get("sessionType");
-  const validSessionType = sessionType === "game" || sessionType === "training" ? sessionType : "practice";
-  const jerseyColor = getString(formData.get("jerseyColor"));
-  const scoreboardVisible = formData.get("scoreboardVisible");
-  const validScoreboard =
-    scoreboardVisible === "yes" || scoreboardVisible === "no" || scoreboardVisible === "not_sure"
-      ? scoreboardVisible
-      : null;
-
   const filename = videoEntry.name || "clip.mp4";
   const fileSize = videoEntry.size;
   const contentType = videoEntry.type || "video/mp4";
@@ -80,6 +68,8 @@ export async function POST(request: Request) {
       filename,
       fileSize,
       cloudflareUid,
+      status: "pending",
+      processingStage: "setup",
       uploadUrl: original.uri,
       videoUrl: playbackUrl,
     });
@@ -91,17 +81,6 @@ export async function POST(request: Request) {
 
     const clipId = created.record.id;
 
-    // Save setup
-    await upsertClipSetup({
-      clipId,
-      ownerId: auth.userId,
-      subjectType: validSubjectType,
-      subjectName: subjectName || null,
-      sessionType: validSessionType,
-      jerseyColor: jerseyColor || null,
-      scoreboardVisible: validScoreboard,
-    });
-
     // Create the result shell now, but do not analyze until the Stream-ready webhook fires.
     await createClipResult({
       clipId,
@@ -112,7 +91,13 @@ export async function POST(request: Request) {
     });
 
     // Processing is triggered by the Cloudflare Stream webhook when the video is ready.
-    return Response.json({ clipId }, { status: 201 });
+    return Response.json({
+      clipId,
+      clipSourceId: clipId,
+      fileName: filename,
+      fileSize,
+      streamVideoId: cloudflareUid,
+    }, { status: 201 });
 
   } catch (err) {
     console.error("CLIP_INGEST_ERROR", { error: String(err), filename, fileSize });
@@ -123,8 +108,4 @@ export async function POST(request: Request) {
       await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => null);
     }
   }
-}
-
-function getString(value: FormDataEntryValue | null): string {
-  return typeof value === "string" ? value.trim() : "";
 }
