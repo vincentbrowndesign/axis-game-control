@@ -11,7 +11,7 @@ type BoardMark =
   | { id: string; type: "cut"; from: Point; to: Point; label?: string }
   | { id: string; type: "draw"; points: Point[] };
 
-type Tool = "move" | "draw" | "O" | "X" | "pass" | "cut";
+type Tool = "move" | "draw" | "erase" | "O" | "X" | "pass" | "cut";
 
 type CoachingSection = {
   label: string;
@@ -27,6 +27,7 @@ type AxisBoardResponse = {
 const TOOL_LABELS: Array<{ id: Tool; label: string }> = [
   { id: "move", label: "Move" },
   { id: "draw", label: "Draw" },
+  { id: "erase", label: "Erase" },
   { id: "O", label: "O" },
   { id: "X", label: "X" },
   { id: "pass", label: "Pass" },
@@ -44,12 +45,14 @@ function nextPlayerLabel(type: "O" | "X", marks: BoardMark[]) {
 
 function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const pad = Math.min(w * 0.05, h * 0.04, 22);
-  const line = "rgba(255,255,255,0.15)";
+  const line = "#c9ced6";
   const cw = w - pad * 2;
   const ch = h - pad * 2;
   const cx = w / 2;
 
   ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#f2f4f7";
+  ctx.fillRect(0, 0, w, h);
   ctx.save();
   ctx.strokeStyle = line;
   ctx.lineWidth = 1.5;
@@ -70,7 +73,7 @@ function drawCourt(ctx: CanvasRenderingContext2D, w: number, h: number) {
 
   ctx.beginPath();
   ctx.arc(bx, by, cw * 0.035, 0, Math.PI * 2);
-  ctx.strokeStyle = "#a8d933";
+  ctx.strokeStyle = "#4a5568";
   ctx.lineWidth = 2;
   ctx.stroke();
   ctx.strokeStyle = line;
@@ -136,10 +139,10 @@ function drawPlayer(ctx: CanvasRenderingContext2D, mark: Extract<BoardMark, { ty
     ctx.beginPath();
     ctx.arc(x, y, 16, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = "#d8eaff";
+    ctx.fillStyle = "#1557b8";
   } else {
     const s = 11;
-    ctx.strokeStyle = "#ff6b4a";
+    ctx.strokeStyle = "#d7372f";
     ctx.beginPath();
     ctx.moveTo(x - s, y - s);
     ctx.lineTo(x + s, y + s);
@@ -152,7 +155,7 @@ function drawPlayer(ctx: CanvasRenderingContext2D, mark: Extract<BoardMark, { ty
     ctx.arc(x, y, 16, 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
-    ctx.fillStyle = "#ffd5cb";
+    ctx.fillStyle = "#b42318";
   }
 
   ctx.font = "700 10px ui-sans-serif, system-ui, sans-serif";
@@ -172,7 +175,7 @@ function drawArrow(ctx: CanvasRenderingContext2D, from: Point, to: Point, w: num
   const head = 13;
 
   ctx.save();
-  ctx.strokeStyle = dashed ? "rgba(244,244,240,0.72)" : "rgba(168,217,51,0.9)";
+  ctx.strokeStyle = dashed ? "#555f6f" : "#1f2937";
   ctx.fillStyle = ctx.strokeStyle;
   ctx.lineWidth = 2.4;
   ctx.lineCap = "round";
@@ -201,7 +204,7 @@ function drawArrowMark(ctx: CanvasRenderingContext2D, mark: Extract<BoardMark, {
   const x = ((mark.from.x + mark.to.x) / 2) * w;
   const y = ((mark.from.y + mark.to.y) / 2) * h;
   ctx.save();
-  ctx.fillStyle = mark.type === "cut" ? "rgba(244,244,240,0.72)" : "rgba(168,217,51,0.9)";
+  ctx.fillStyle = mark.type === "cut" ? "#555f6f" : "#1f2937";
   ctx.font = "700 10px ui-sans-serif, system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
@@ -213,7 +216,7 @@ function drawFreehand(ctx: CanvasRenderingContext2D, points: Point[], w: number,
   if (points.length < 2) return;
 
   ctx.save();
-  ctx.strokeStyle = "rgba(244,244,240,0.92)";
+  ctx.strokeStyle = "#1f2937";
   ctx.lineWidth = 2.2;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -222,6 +225,40 @@ function drawFreehand(ctx: CanvasRenderingContext2D, points: Point[], w: number,
   for (const point of points.slice(1)) ctx.lineTo(point.x * w, point.y * h);
   ctx.stroke();
   ctx.restore();
+}
+
+function sameMarks(a: BoardMark[], b: BoardMark[]) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function distancePointToSegment(point: Point, from: Point, to: Point, w: number, h: number) {
+  const px = point.x * w;
+  const py = point.y * h;
+  const ax = from.x * w;
+  const ay = from.y * h;
+  const bx = to.x * w;
+  const by = to.y * h;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSq = dx * dx + dy * dy;
+  const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+function markContainsPoint(mark: BoardMark, point: Point, w: number, h: number) {
+  if (mark.type === "O" || mark.type === "X") {
+    return Math.hypot(mark.x * w - point.x * w, mark.y * h - point.y * h) <= 24;
+  }
+
+  if (mark.type === "pass" || mark.type === "cut") {
+    return distancePointToSegment(point, mark.from, mark.to, w, h) <= 18;
+  }
+
+  for (let i = 1; i < mark.points.length; i += 1) {
+    if (distancePointToSegment(point, mark.points[i - 1], mark.points[i], w, h) <= 18) return true;
+  }
+
+  return false;
 }
 
 function renderBoard(ctx: CanvasRenderingContext2D, w: number, h: number, marks: BoardMark[], draft: BoardMark | null) {
@@ -246,9 +283,11 @@ export default function BoardPage() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const marksRef = useRef<BoardMark[]>([]);
   const draftRef = useRef<BoardMark | null>(null);
+  const historyRef = useRef<BoardMark[][]>([]);
   const dragRef = useRef<
     | { kind: "draw"; points: Point[] }
-    | { kind: "move"; id: string }
+    | { kind: "move"; id: string; before: BoardMark[] }
+    | { kind: "erase"; before: BoardMark[] }
     | { kind: "arrow"; type: "pass" | "cut"; from: Point; to: Point }
     | null
   >(null);
@@ -258,6 +297,7 @@ export default function BoardPage() {
   const [query, setQuery] = useState("");
   const [sections, setSections] = useState<CoachingSection[] | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [historyDepth, setHistoryDepth] = useState(0);
 
   useEffect(() => {
     marksRef.current = boardMarks;
@@ -323,9 +363,43 @@ export default function BoardPage() {
     return null;
   }
 
-  function updateMarks(next: BoardMark[]) {
+  function hitMark(point: Point) {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    for (const mark of [...marksRef.current].reverse()) {
+      if (markContainsPoint(mark, point, rect.width, rect.height)) return mark;
+    }
+    return null;
+  }
+
+  function setMarks(next: BoardMark[]) {
     marksRef.current = next;
     setBoardMarks(next);
+  }
+
+  function commitMarks(next: BoardMark[], before = marksRef.current) {
+    if (sameMarks(before, next)) return;
+    historyRef.current = [...historyRef.current, before].slice(-80);
+    setHistoryDepth(historyRef.current.length);
+    setMarks(next);
+  }
+
+  function undoBoardAction() {
+    const previous = historyRef.current.at(-1);
+    if (!previous) return;
+    historyRef.current = historyRef.current.slice(0, -1);
+    setHistoryDepth(historyRef.current.length);
+    dragRef.current = null;
+    draftRef.current = null;
+    setMarks(previous);
+  }
+
+  function eraseAt(point: Point) {
+    const hit = hitMark(point);
+    if (!hit) return false;
+    setMarks(marksRef.current.filter((mark) => mark.id !== hit.id));
+    return true;
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -334,7 +408,7 @@ export default function BoardPage() {
     const point = getPoint(e);
 
     if (tool === "O" || tool === "X") {
-      updateMarks([...marksRef.current, {
+      commitMarks([...marksRef.current, {
         id: nid(),
         type: tool,
         label: nextPlayerLabel(tool, marksRef.current),
@@ -346,7 +420,13 @@ export default function BoardPage() {
 
     if (tool === "move") {
       const hit = hitPlayer(point);
-      if (hit) dragRef.current = { kind: "move", id: hit.id };
+      if (hit) dragRef.current = { kind: "move", id: hit.id, before: marksRef.current };
+      return;
+    }
+
+    if (tool === "erase") {
+      dragRef.current = { kind: "erase", before: marksRef.current };
+      eraseAt(point);
       return;
     }
 
@@ -369,10 +449,15 @@ export default function BoardPage() {
     const point = getPoint(e);
 
     if (active.kind === "move") {
-      updateMarks(marksRef.current.map((mark) => {
+      setMarks(marksRef.current.map((mark) => {
         if (mark.id !== active.id || (mark.type !== "O" && mark.type !== "X")) return mark;
         return { ...mark, x: point.x, y: point.y };
       }));
+      return;
+    }
+
+    if (active.kind === "erase") {
+      eraseAt(point);
       return;
     }
 
@@ -394,13 +479,21 @@ export default function BoardPage() {
     dragRef.current = null;
 
     if (active?.kind === "draw" && active.points.length > 1) {
-      updateMarks([...marksRef.current, { id: nid(), type: "draw", points: active.points }]);
+      commitMarks([...marksRef.current, { id: nid(), type: "draw", points: active.points }]);
+    }
+
+    if (active?.kind === "move") {
+      commitMarks(marksRef.current, active.before);
+    }
+
+    if (active?.kind === "erase") {
+      commitMarks(marksRef.current, active.before);
     }
 
     if (active?.kind === "arrow") {
       const distance = Math.hypot(active.to.x - active.from.x, active.to.y - active.from.y);
       if (distance > 0.015) {
-        updateMarks([...marksRef.current, { id: nid(), type: active.type, from: active.from, to: active.to }]);
+        commitMarks([...marksRef.current, { id: nid(), type: active.type, from: active.from, to: active.to }]);
       }
     }
 
@@ -411,7 +504,7 @@ export default function BoardPage() {
   function clearBoard() {
     dragRef.current = null;
     draftRef.current = null;
-    updateMarks([]);
+    commitMarks([]);
   }
 
   async function askAxis() {
@@ -437,7 +530,7 @@ export default function BoardPage() {
       });
       const data = await res.json().catch(() => null) as AxisBoardResponse | null;
       if (data?.boardMarks && (data.intent === "populate" || data.intent === "adjust")) {
-        updateMarks(data.boardMarks);
+        commitMarks(data.boardMarks);
       }
       if (data?.sections) setSections(data.sections);
     } catch {
@@ -447,6 +540,19 @@ export default function BoardPage() {
     }
   }
 
+  const blockBoardInteraction = (e: React.SyntheticEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
+  const boardBlockHandlers = {
+    onContextMenu: blockBoardInteraction,
+    onSelectStart: blockBoardInteraction,
+    onCopy: blockBoardInteraction,
+    onCut: blockBoardInteraction,
+    onPaste: blockBoardInteraction,
+  } as React.HTMLAttributes<HTMLDivElement> & {
+    onSelectStart: (e: React.SyntheticEvent<HTMLDivElement>) => void;
+  };
+
   return (
     <main className="root">
       <header className="header">
@@ -454,10 +560,15 @@ export default function BoardPage() {
         <p className="sub">{describeMarks(boardMarks)}</p>
       </header>
 
-      <div className={`canvas-wrap canvas-wrap--${tool}`} ref={wrapRef}>
+      <div
+        className={`canvas-wrap canvas-wrap--${tool}`}
+        ref={wrapRef}
+        {...boardBlockHandlers}
+      >
         <canvas
           ref={canvasRef}
           className="canvas"
+          draggable={false}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -467,6 +578,14 @@ export default function BoardPage() {
 
       <div className="bottom">
         <div className="tools-row">
+          <button
+            type="button"
+            className="tool tool--undo"
+            disabled={historyDepth === 0}
+            onClick={undoBoardAction}
+          >
+            Undo
+          </button>
           {TOOL_LABELS.map((item) => (
             <button
               key={item.id}
@@ -519,8 +638,8 @@ export default function BoardPage() {
 
       <style jsx>{`
         .root {
-          background: #111110;
-          color: #f4f4f0;
+          background: #ffffff;
+          color: #111827;
           display: flex;
           flex-direction: column;
           font-family: ui-sans-serif, system-ui, sans-serif;
@@ -530,29 +649,40 @@ export default function BoardPage() {
 
         .header {
           flex-shrink: 0;
-          padding: 14px 20px 8px;
+          padding: 16px 22px 10px;
         }
 
         .title {
-          font-size: 15px;
+          font-size: 17px;
           font-weight: 700;
           letter-spacing: 0;
-          margin: 0 0 2px;
+          margin: 0 0 4px;
         }
 
         .sub {
-          color: rgba(255,255,255,0.35);
-          font-size: 11px;
+          color: #667085;
+          font-size: 13px;
           margin: 0;
         }
 
         .canvas-wrap {
+          background: #f2f4f7;
+          border: 1px solid #d9dee7;
+          border-radius: 10px;
           flex: 1;
+          margin: 0 16px;
           min-height: 0;
+          overflow: hidden;
           position: relative;
+          touch-action: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+          -webkit-user-drag: none;
+          -webkit-user-select: none;
         }
 
         .canvas-wrap--draw .canvas { cursor: crosshair; }
+        .canvas-wrap--erase .canvas { cursor: not-allowed; }
         .canvas-wrap--O .canvas,
         .canvas-wrap--X .canvas { cursor: cell; }
         .canvas-wrap--move .canvas { cursor: grab; }
@@ -563,113 +693,129 @@ export default function BoardPage() {
           display: block;
           height: 100%;
           touch-action: none;
+          user-select: none;
           width: 100%;
+          -webkit-touch-callout: none;
+          -webkit-user-drag: none;
+          -webkit-user-select: none;
         }
 
         .bottom {
-          border-top: 1px solid rgba(255,255,255,0.08);
+          background: #ffffff;
           flex-shrink: 0;
-          max-height: 48vh;
+          max-height: 46vh;
           overflow-y: auto;
         }
 
         .tools-row {
           align-items: center;
-          border-bottom: 1px solid rgba(255,255,255,0.06);
           display: flex;
-          gap: 6px;
+          gap: 8px;
           overflow-x: auto;
-          padding: 10px 16px;
+          padding: 12px 16px 10px;
         }
 
         .tool,
         .clear {
-          background: transparent;
-          border: 1.5px solid rgba(255,255,255,0.12);
-          border-radius: 6px;
-          color: rgba(255,255,255,0.48);
-          cursor: pointer;
-          flex-shrink: 0;
-          font-family: inherit;
-          font-size: 12px;
-          font-weight: 700;
-          min-height: 36px;
-          padding: 0 14px;
-          text-transform: uppercase;
-          transition: all 0.1s;
-        }
-
-        .tool:hover,
-        .clear:hover { color: rgba(255,255,255,0.8); }
-
-        .tool--on {
-          background: rgba(255,255,255,0.09);
-          border-color: rgba(255,255,255,0.22);
-          color: #f4f4f0;
-        }
-
-        .tool--O { color: rgba(74,158,255,0.78); border-color: rgba(74,158,255,0.22); }
-        .tool--O.tool--on { background: rgba(74,158,255,0.1); border-color: #4a9eff; color: #4a9eff; }
-
-        .tool--X { color: rgba(255,107,74,0.78); border-color: rgba(255,107,74,0.22); }
-        .tool--X.tool--on { background: rgba(255,107,74,0.1); border-color: #ff6b4a; color: #ff6b4a; }
-
-        .spacer { flex: 1; min-width: 2px; }
-
-        .clear {
-          border-color: rgba(255,255,255,0.09);
-          color: rgba(255,255,255,0.34);
-        }
-
-        .query-row {
-          display: flex;
-          gap: 10px;
-          padding: 12px 16px;
-        }
-
-        .query {
-          background: rgba(255,255,255,0.04);
-          border: 1.5px solid rgba(255,255,255,0.1);
+          background: #ffffff;
+          border: 1px solid #d0d5dd;
           border-radius: 8px;
-          color: #f4f4f0;
-          flex: 1;
-          font-family: inherit;
-          font-size: 14px;
-          line-height: 1.5;
-          outline: none;
-          padding: 8px 12px;
-          resize: none;
-          transition: border-color 0.15s;
-        }
-
-        .query:focus { border-color: rgba(255,255,255,0.22); }
-        .query::placeholder { color: rgba(255,255,255,0.22); }
-
-        .ask {
-          align-self: flex-end;
-          background: rgba(255,255,255,0.07);
-          border: 1.5px solid rgba(255,255,255,0.13);
-          border-radius: 8px;
-          color: #f4f4f0;
+          color: #344054;
           cursor: pointer;
           flex-shrink: 0;
           font-family: inherit;
           font-size: 13px;
           font-weight: 700;
-          min-height: 42px;
-          padding: 0 20px;
+          min-height: 40px;
+          padding: 0 15px;
+          transition: background 0.12s, border-color 0.12s, color 0.12s;
+        }
+
+        .tool:hover,
+        .clear:hover {
+          background: #f9fafb;
+          border-color: #98a2b3;
+          color: #101828;
+        }
+
+        .tool:disabled {
+          background: #f2f4f7;
+          color: #98a2b3;
+          cursor: default;
+        }
+
+        .tool--on {
+          background: #eef4ff;
+          border-color: #2f80ed;
+          color: #174ea6;
+        }
+
+        .tool--O { color: #1557b8; border-color: #b2ccff; }
+        .tool--O.tool--on { background: #e8f1ff; border-color: #1557b8; color: #1557b8; }
+
+        .tool--X { color: #b42318; border-color: #fecdca; }
+        .tool--X.tool--on { background: #fff1f0; border-color: #d7372f; color: #b42318; }
+
+        .tool--erase.tool--on { background: #fff7ed; border-color: #f97316; color: #9a3412; }
+
+        .spacer { flex: 1; min-width: 2px; }
+
+        .clear {
+          color: #667085;
+        }
+
+        .query-row {
+          display: flex;
+          gap: 10px;
+          padding: 10px 16px 12px;
+        }
+
+        .query {
+          background: #ffffff;
+          border: 1px solid #d0d5dd;
+          border-radius: 8px;
+          color: #101828;
+          flex: 1;
+          font-family: inherit;
+          font-size: 15px;
+          line-height: 1.5;
+          outline: none;
+          padding: 10px 12px;
+          resize: none;
+          transition: border-color 0.15s, box-shadow 0.15s;
+        }
+
+        .query:focus {
+          border-color: #2f80ed;
+          box-shadow: 0 0 0 3px rgba(47,128,237,0.14);
+        }
+        .query::placeholder { color: #98a2b3; }
+
+        .ask {
+          align-self: flex-end;
+          background: #111827;
+          border: 1px solid #111827;
+          border-radius: 8px;
+          color: #ffffff;
+          cursor: pointer;
+          flex-shrink: 0;
+          font-family: inherit;
+          font-size: 14px;
+          font-weight: 700;
+          min-height: 46px;
+          padding: 0 22px;
           transition: all 0.12s;
           white-space: nowrap;
         }
 
-        .ask:hover:not(:disabled) { background: rgba(255,255,255,0.12); }
+        .ask:hover:not(:disabled) { background: #344054; border-color: #344054; }
         .ask:disabled { cursor: default; opacity: 0.4; }
 
         .coaching {
-          border-top: 1px solid rgba(255,255,255,0.08);
+          border-top: 1px solid #eaecf0;
           display: flex;
           flex-direction: column;
-          gap: 14px;
+          gap: 12px;
           padding: 16px 16px 24px;
         }
 
@@ -680,20 +826,21 @@ export default function BoardPage() {
         }
 
         .section-label {
-          color: rgba(255,255,255,0.32);
-          font-size: 10px;
+          color: #667085;
+          font-size: 11px;
           font-weight: 700;
           text-transform: uppercase;
         }
 
         .section-text {
-          color: #f4f4f0;
-          font-size: 14px;
-          line-height: 1.55;
+          color: #101828;
+          font-size: 15px;
+          line-height: 1.45;
         }
 
         @media (max-width: 640px) {
           .header { padding-inline: 14px; }
+          .canvas-wrap { margin-inline: 10px; }
           .tools-row,
           .query-row { padding-inline: 12px; }
           .query-row { flex-direction: column; }

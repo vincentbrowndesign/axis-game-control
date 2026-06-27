@@ -51,13 +51,13 @@ export async function POST(request: Request) {
   const imageData = typeof body.imageData === "string" ? body.imageData : null;
   const marks = parseBoardMarks(body.boardMarks).slice(0, 200);
   const intent = inferIntent(query, marks);
-  const deep = wantsDepth(query);
+  const deepLabels = requestedDeepLabels(query);
 
   const ai = imageData
-    ? await visionAnalysis({ query, imageData, marks, intent, deep })
+    ? await visionAnalysis({ query, imageData, marks, intent, deepLabels })
     : null;
 
-  return Response.json(normalizeResponse(ai ?? fallback({ query, marks, intent, deep }), deep));
+  return Response.json(normalizeResponse(ai ?? fallback({ query, marks, intent, deepLabels }), deepLabels));
 }
 
 async function visionAnalysis(args: {
@@ -65,7 +65,7 @@ async function visionAnalysis(args: {
   imageData: string;
   marks: BoardMark[];
   intent: AxisBoardIntent;
-  deep: boolean;
+  deepLabels: SectionLabel[];
 }): Promise<AxisBoardResponse | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
@@ -78,7 +78,7 @@ Use BOTH sources:
 
 Coach question: ${args.query}
 Requested intent: ${args.intent}
-Default depth: ${args.deep ? "deep allowed" : "short only"}
+Extra sections requested: ${args.deepLabels.length ? args.deepLabels.join(", ") : "none"}
 
 boardMarks:
 ${JSON.stringify(summarizeMarks(args.marks), null, 2)}
@@ -102,7 +102,8 @@ Return ONLY valid JSON matching:
 
 Rules:
 - Sound like a coach in a timeout, not a basketball article.
-- Default sections are ONLY CALL, READ, COUNTER, CUE unless the query asks why, go deeper, explain, teach, rep, practice, or walkthrough.
+- Default sections are ONLY CALL, READ, COUNTER, CUE unless extra sections are requested above.
+- If extra sections are requested, add only those exact labels.
 - Keep each default text under 12 words.
 - Be specific to O/X/pass/cut spacing. No generic lines.
 - No player identities, shot results, stats, score, or certainty.
@@ -140,7 +141,7 @@ function fallback(args: {
   query: string;
   marks: BoardMark[];
   intent: AxisBoardIntent;
-  deep: boolean;
+  deepLabels: SectionLabel[];
 }): AxisBoardResponse {
   const workingMarks = args.intent === "populate"
     ? buildSetupFromQuery(args.query)
@@ -193,12 +194,17 @@ function fallback(args: {
     { label: "CUE", text: hasTrap ? "Touch middle, beat the trap." : hasCut ? "Cut when eyes turn." : "Make help choose." },
   ];
 
-  if (args.deep) {
-    sections.push(
-      { label: "WHY", text: "The first pass moves the nearest X; the cut punishes help." },
-      { label: "TEACH", text: "Freeze on the catch. Point to the open help decision." },
-      { label: "REP", text: `${Math.max(3, counts.O)}-on-${Math.max(2, counts.X || 2)}. Score only clean first reads.` },
-    );
+  if (args.deepLabels.includes("WHY")) {
+    sections.push({ label: "WHY", text: "The first pass moves the nearest X; the cut punishes help." });
+  }
+  if (args.deepLabels.includes("TEACH")) {
+    sections.push({ label: "TEACH", text: "Freeze on the catch. Point to the open help decision." });
+  }
+  if (args.deepLabels.includes("REP")) {
+    sections.push({ label: "REP", text: `${Math.max(3, counts.O)}-on-${Math.max(2, counts.X || 2)}. Score only clean first reads.` });
+  }
+  if (args.deepLabels.includes("WALKTHROUGH")) {
+    sections.push({ label: "WALKTHROUGH", text: "Flash middle, pass out, cut behind the X, then lift corner." });
   }
 
   return {
@@ -260,13 +266,18 @@ function inferIntent(query: string, marks: BoardMark[]): AxisBoardIntent {
   return "reason";
 }
 
-function wantsDepth(query: string) {
+function requestedDeepLabels(query: string): SectionLabel[] {
   const lower = query.toLowerCase();
-  return ["why", "go deeper", "explain", "teach", "turn this into a rep", "practice", "walkthrough", "rep"].some((word) => lower.includes(word));
+  const labels: SectionLabel[] = [];
+  if (lower.includes("why") || lower.includes("go deeper") || lower.includes("explain")) labels.push("WHY");
+  if (lower.includes("teach")) labels.push("TEACH");
+  if (lower.includes("rep") || lower.includes("practice")) labels.push("REP");
+  if (lower.includes("walkthrough") || lower.includes("walk through")) labels.push("WALKTHROUGH");
+  return labels;
 }
 
-function normalizeResponse(response: AxisBoardResponse, deep: boolean): AxisBoardResponse {
-  const labels = deep ? ALL_LABELS : DEFAULT_LABELS;
+function normalizeResponse(response: AxisBoardResponse, deepLabels: SectionLabel[]): AxisBoardResponse {
+  const labels = [...DEFAULT_LABELS, ...deepLabels];
   const sections = response.sections
     .filter((section) => labels.includes(section.label))
     .map((section) => ({
@@ -276,10 +287,10 @@ function normalizeResponse(response: AxisBoardResponse, deep: boolean): AxisBoar
 
   const filled = DEFAULT_LABELS.map((label) => (
     sections.find((section) => section.label === label)
-    ?? fallback({ query: "", marks: response.boardMarks ?? [], intent: "reason", deep: false }).sections.find((section) => section.label === label)!
+    ?? fallback({ query: "", marks: response.boardMarks ?? [], intent: "reason", deepLabels: [] }).sections.find((section) => section.label === label)!
   ));
 
-  const extra = deep ? sections.filter((section) => DEEP_LABELS.includes(section.label)) : [];
+  const extra = sections.filter((section) => deepLabels.includes(section.label));
 
   return {
     intent: response.intent,
