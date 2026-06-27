@@ -121,8 +121,8 @@ export function ClipRoomNew({ mode }: Props) {
       await startProcessing(clip.clipSourceId, token);
       setStage("done");
       setTimeout(() => router.push(`/clips/${clip.clipSourceId}`), 600);
-    } catch {
-      setError("Processing could not start. Please try again.");
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Processing could not start. Please try again.");
       setStage("setup");
     }
   }
@@ -426,6 +426,7 @@ function ClipSetupForm({ clip, setup, onChange, onBack, onChooseAgain, onSubmit,
     onChange({ ...setup, [key]: value });
   }
 
+  const hasClipSourceId = Boolean(clip?.clipSourceId);
   const buttonLabel =
     authStatus !== "signed_in"
       ? "Sign in to continue"
@@ -434,7 +435,8 @@ function ClipSetupForm({ clip, setup, onChange, onBack, onChooseAgain, onSubmit,
         : clip?.uploadStatus === "failed"
           ? "Choose Video Again"
           : "Start Processing";
-  const canSubmit = authStatus === "signed_in" && clip?.uploadStatus !== "uploading";
+  const canSubmit = authStatus === "signed_in"
+    && (clip?.uploadStatus === "failed" || (clip?.uploadStatus === "uploaded" && hasClipSourceId));
 
   return (
     <div className="csf-root">
