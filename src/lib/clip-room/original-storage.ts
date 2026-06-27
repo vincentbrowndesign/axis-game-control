@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySupabaseClient = ReturnType<typeof createClient<any, any, any>>;
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
@@ -69,7 +71,7 @@ function getStorageClient() {
   };
 }
 
-async function ensureOriginalClipBucket(client: ReturnType<typeof createClient>) {
+async function ensureOriginalClipBucket(client: AnySupabaseClient) {
   const { data } = await client.storage.getBucket(BUCKET);
   if (data) return null;
 
