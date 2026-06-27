@@ -40,7 +40,6 @@ export async function POST(request: Request) {
     filename,
     fileSize,
     cloudflareUid: direct.upload.uid,
-    uploadUrl: direct.upload.uploadURL,
   });
 
   if (created.error || !created.record) {

@@ -62,7 +62,7 @@ export function ClipRoomNew({ mode }: Props) {
       );
       setUploadProgress(100);
       setStage("done");
-      setTimeout(() => router.push(`/axis/clip-room/${clipId}`), 600);
+      setTimeout(() => router.push(`/clips/${clipId}`), 600);
     } catch (err) {
       setError("Upload could not start. Please choose a video and try again.");
       setStage("setup");
@@ -74,7 +74,7 @@ export function ClipRoomNew({ mode }: Props) {
   return (
     <div className="crn-root">
       <header className="crn-header">
-        <Link href="/axis/clip-room" className="crn-back">Clip Room</Link>
+        <Link href="/" className="crn-back">Clip Room</Link>
         <span className="crn-header-title">{title}</span>
         <AxisAuthControl auth={auth} />
       </header>

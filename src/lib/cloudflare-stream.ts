@@ -29,6 +29,10 @@ type StreamDownloadResult = {
 
 type StreamUploadResult = {
   uid?: string;
+  playback?: {
+    hls?: string;
+    dash?: string;
+  };
 };
 
 export type CloudflareDirectUpload = {
@@ -126,15 +130,17 @@ export async function uploadCloudflareStreamVideoFile({
   });
   const json = parseCloudflareJson<StreamUploadResult>(body);
   const uid = json?.result?.uid;
+  const playbackUrl = json?.result?.playback?.hls ?? null;
   console.log("CLOUDFLARE_REPLAY_UPLOAD_UID", {
+    playbackUrl: playbackUrl ?? null,
     success: json?.success ?? null,
     uid: uid ?? null,
   });
   if (!response.ok || !json?.success || !uid) {
-    return { error: getCloudflareError(json) || `cloudflare_replay_upload_failed_${response.status}`, uid: null };
+    return { error: getCloudflareError(json) || `cloudflare_replay_upload_failed_${response.status}`, uid: null, playbackUrl: null };
   }
 
-  return { error: null, uid };
+  return { error: null, uid, playbackUrl };
 }
 
 async function createFileBackedBlob(filePath: string) {

@@ -1,7 +1,5 @@
-import { ClipRoomMain } from "../../../components/clip-room/ClipRoomMain";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "Clip Room — Axis" };
-
-export default function ClipRoomPage() {
-  return <ClipRoomMain />;
+export default function ClipRoomRedirect() {
+  redirect("/");
 }

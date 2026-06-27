@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "../styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "Midheaven",
-  description: "Midheaven turns real-life sources into a Money Map.",
+  title: "Axis",
+  description: "Axis reads your clips and builds basketball stats.",
 };
 
 export default function RootLayout({

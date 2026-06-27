@@ -59,6 +59,7 @@ export async function POST(request: Request) {
     }
 
     const cloudflareUid = upload.uid;
+    const playbackUrl = upload.playbackUrl ?? null;
 
     // Create clip source
     const created = await createClipSource({
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
       filename,
       fileSize,
       cloudflareUid,
-      uploadUrl: "",
+      videoUrl: playbackUrl,
     });
 
     if (created.error || !created.record) {

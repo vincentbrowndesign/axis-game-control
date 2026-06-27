@@ -25,18 +25,17 @@ export function ClipRoomMain() {
   return (
     <div className="cr-root">
       <header className="cr-header">
-        <Link href="/axis" className="cr-back">Axis</Link>
-        <span className="cr-header-title">Clip Room</span>
+        <span className="cr-logo">Axis</span>
         <AxisAuthControl auth={auth} />
       </header>
 
       <main className="cr-main">
         <div className="cr-actions">
-          <Link href="/axis/clip-room/new?mode=record" className="cr-card cr-card--primary">
+          <Link href="/record" className="cr-card cr-card--primary">
             <span className="cr-card-title">Record Clip</span>
             <span className="cr-card-sub">Use your camera</span>
           </Link>
-          <Link href="/axis/clip-room/new?mode=upload" className="cr-card">
+          <Link href="/upload" className="cr-card">
             <span className="cr-card-title">Upload Clip</span>
             <span className="cr-card-sub">Choose a video file</span>
           </Link>
@@ -51,7 +50,7 @@ export function ClipRoomMain() {
             )}
             <div className="cr-clip-list">
               {clips.map((clip) => (
-                <Link key={clip.id} href={`/axis/clip-room/${clip.id}`} className="cr-clip-card">
+                <Link key={clip.id} href={`/clips/${clip.id}`} className="cr-clip-card">
                   <span className="cr-clip-origin">
                     {clip.origin === "recorded" ? "REC" : "UP"}
                   </span>
@@ -84,19 +83,12 @@ export function ClipRoomMain() {
           align-items: center;
           border-bottom: 1px solid var(--axis-line);
           display: flex;
-          gap: 12px;
           justify-content: space-between;
           min-height: 52px;
           padding: 0 clamp(16px, 4vw, 32px);
         }
 
-        .cr-back {
-          color: var(--axis-muted);
-          font-size: 13px;
-          text-decoration: none;
-        }
-
-        .cr-header-title {
+        .cr-logo {
           font-size: 13px;
           font-weight: 700;
           letter-spacing: 0.06em;

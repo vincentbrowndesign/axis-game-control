@@ -15,6 +15,43 @@ import type {
 
 type Tab = "activity" | "stats" | "check-plays" | "press-pack";
 
+const PROCESSING_STAGES = [
+  "Source saved",
+  "Clip setup saved",
+  "Video uploaded",
+  "Axis reading clip",
+  "Activity building",
+  "Stats calculating",
+  "Press Pack generating",
+];
+
+function getStageStatuses(
+  processingStage: string | null,
+  status: string,
+): Array<"done" | "active" | "pending"> {
+  if (status === "ready") return PROCESSING_STAGES.map(() => "done");
+  if (status === "failed") return ["done", "done", "done", "pending", "pending", "pending", "pending"];
+
+  const stageMap: Record<string, number> = {
+    queued: 3,
+    waiting_for_video: 3,
+    extracting_frames: 3,
+    extracting_audio: 3,
+    analyzing_frames: 4,
+    applying_basketball_logic: 4,
+    creating_check_plays: 5,
+    generating_press_pack: 6,
+    complete: 7,
+  };
+
+  const active = processingStage ? (stageMap[processingStage] ?? 3) : 3;
+  return PROCESSING_STAGES.map((_, i) => {
+    if (i < active) return "done";
+    if (i === active) return "active";
+    return "pending";
+  });
+}
+
 export function ClipRoomDetail({ clipId }: { clipId: string }) {
   const auth = useAxisAuth();
   const [source, setSource] = useState<ClipSource | null>(null);
@@ -96,37 +133,50 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
     }).catch(() => null);
     if (!res?.ok) return;
     const data = await res.json().catch(() => null);
-    // Update local play state
     setPlays((prev) => prev.map((p) => p.id === playId ? { ...p, status: "resolved", resolution } : p));
-    // Refresh events + stats + press pack
     if (data?.stats) setStats(data.stats);
     await fetchAll();
   }
 
   const pendingPlays = plays.filter((p) => p.status === "pending");
-  const isProcessing = source && source.status !== "ready" && source.status !== "failed";
+  const isProcessing = source
+    ? source.status !== "ready" && source.status !== "failed"
+    : false;
+  const stageStatuses = source
+    ? getStageStatuses(source.processingStage, source.status)
+    : null;
 
   return (
     <div className="crd-root">
       <header className="crd-header">
-        <Link href="/axis/clip-room" className="crd-back">Clip Room</Link>
+        <Link href="/" className="crd-back">Clip Room</Link>
         <span className="crd-header-title">{source?.filename ?? "Clip"}</span>
         <AxisAuthControl auth={auth} />
       </header>
 
-      {isProcessing && source && (
-        <div className="crd-processing">
-          <div className="crd-processing-bar">
-            <div className="crd-processing-fill" style={{ width: `${source.processingProgress}%` }} />
+      {isProcessing && source && stageStatuses && (
+        <div className="crd-status-card">
+          <div className="crd-stage-list">
+            {PROCESSING_STAGES.map((label, i) => {
+              const s = stageStatuses[i];
+              return (
+                <div key={label} className={`crd-stage crd-stage--${s}`}>
+                  <span className="crd-stage-dot">
+                    {s === "done" ? "✓" : s === "active" ? "●" : "○"}
+                  </span>
+                  <span className="crd-stage-label">{label}</span>
+                </div>
+              );
+            })}
           </div>
-          <p className="crd-processing-label">
-            {stageLabel(source.processingStage)} — {source.processingProgress}%
-          </p>
+          <div className="crd-progress-track">
+            <div className="crd-progress-fill" style={{ width: `${source.processingProgress}%` }} />
+          </div>
         </div>
       )}
 
       {source?.status === "failed" && (
-        <div className="crd-error">Processing failed. {source.error}</div>
+        <div className="crd-error">Processing could not complete. Try uploading the clip again.</div>
       )}
 
       <nav className="crd-tabs">
@@ -138,6 +188,7 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
         ] as [Tab, string][]).map(([tab, label]) => (
           <button
             key={tab}
+            type="button"
             className={`crd-tab ${activeTab === tab ? "crd-tab--on" : ""}`}
             onClick={() => setActiveTab(tab)}
           >
@@ -150,16 +201,16 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
         {loading && <p className="crd-muted">Loading...</p>}
 
         {!loading && activeTab === "activity" && (
-          <ActivityTab events={events} />
+          <ActivityTab events={events} isProcessing={isProcessing} />
         )}
         {!loading && activeTab === "stats" && (
-          <StatsTab stats={stats} />
+          <StatsTab stats={stats} isProcessing={isProcessing} />
         )}
         {!loading && activeTab === "check-plays" && (
           <CheckPlaysTab plays={plays} onResolve={resolvePlay} />
         )}
         {!loading && activeTab === "press-pack" && (
-          <PressPackTab pressPack={pressPack} stats={stats} />
+          <PressPackTab pressPack={pressPack} stats={stats} isProcessing={isProcessing} hasActivity={events.length > 0} />
         )}
       </main>
 
@@ -200,35 +251,55 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
           white-space: nowrap;
         }
 
-        .crd-processing {
+        .crd-status-card {
+          border-bottom: 1px solid var(--axis-line);
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          padding: 16px clamp(16px, 4vw, 32px);
+        }
+
+        .crd-stage-list {
           display: flex;
           flex-direction: column;
           gap: 6px;
-          padding: 12px clamp(16px, 4vw, 32px);
-          border-bottom: 1px solid var(--axis-line);
         }
 
-        .crd-processing-bar {
+        .crd-stage {
+          align-items: center;
+          display: flex;
+          gap: 8px;
+        }
+
+        .crd-stage-dot {
+          font-size: 11px;
+          width: 14px;
+        }
+
+        .crd-stage-label {
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .crd-stage--done .crd-stage-dot { color: var(--axis-live); }
+        .crd-stage--done .crd-stage-label { color: var(--axis-muted); }
+        .crd-stage--active .crd-stage-dot { color: var(--axis-ink); }
+        .crd-stage--active .crd-stage-label { color: var(--axis-ink); }
+        .crd-stage--pending .crd-stage-dot { color: rgba(244,244,240,0.2); }
+        .crd-stage--pending .crd-stage-label { color: rgba(244,244,240,0.2); }
+
+        .crd-progress-track {
           background: rgba(255,255,255,0.08);
           border-radius: 3px;
-          height: 3px;
+          height: 2px;
           overflow: hidden;
         }
 
-        .crd-processing-fill {
+        .crd-progress-fill {
           background: var(--axis-live);
           border-radius: 3px;
           height: 100%;
           transition: width 0.4s ease;
-        }
-
-        .crd-processing-label {
-          color: var(--axis-muted);
-          font-size: 11px;
-          font-weight: 600;
-          letter-spacing: 0.04em;
-          margin: 0;
-          text-transform: uppercase;
         }
 
         .crd-error {
@@ -288,12 +359,14 @@ export function ClipRoomDetail({ clipId }: { clipId: string }) {
 
 // ─── Activity Tab ─────────────────────────────────────────────────────────────
 
-function ActivityTab({ events }: { events: ClipEvent[] }) {
+function ActivityTab({ events, isProcessing }: { events: ClipEvent[]; isProcessing: boolean }) {
   if (events.length === 0) {
+    const message = isProcessing
+      ? "Axis is reading the clip. Activity will appear when stat events are found."
+      : "No stat events found. This may be a short clip, still image, or non-game video.";
     return (
       <div className="act-empty">
-        <p>No activity yet.</p>
-        <p className="act-muted">Processing will create events from your clip.</p>
+        <p className="act-empty-msg">{message}</p>
       </div>
     );
   }
@@ -322,8 +395,7 @@ function ActivityTab({ events }: { events: ClipEvent[] }) {
 
       <style jsx>{`
         .act-empty { display: flex; flex-direction: column; gap: 6px; }
-        .act-empty p { color: var(--axis-ink); font-size: 15px; margin: 0; }
-        .act-muted { color: var(--axis-muted); font-size: 13px; }
+        .act-empty-msg { color: var(--axis-muted); font-size: 14px; line-height: 1.5; margin: 0; max-width: 40ch; }
         .act-root { display: flex; flex-direction: column; gap: 2px; max-width: 560px; }
         .act-list { display: flex; flex-direction: column; gap: 1px; }
         .act-row { align-items: center; border-radius: 8px; display: flex; gap: 10px; min-height: 46px; padding: 8px 10px; }
@@ -349,9 +421,14 @@ function ActivityTab({ events }: { events: ClipEvent[] }) {
 
 // ─── Stats Tab ────────────────────────────────────────────────────────────────
 
-function StatsTab({ stats }: { stats: ClipStatLines | null }) {
-  if (!stats) {
-    return <p style={{ color: "var(--axis-muted)", fontSize: 13 }}>Stats will appear after processing.</p>;
+function StatsTab({ stats, isProcessing }: { stats: ClipStatLines | null; isProcessing: boolean }) {
+  if (isProcessing || !stats) {
+    return (
+      <>
+        <p className="st-waiting">Stats waiting on Activity.</p>
+        <style jsx>{`.st-waiting { color: var(--axis-muted); font-size: 13px; margin: 0; }`}</style>
+      </>
+    );
   }
 
   const rows: Array<{ label: string; value: string | number }> = [
@@ -412,9 +489,14 @@ function CheckPlaysTab({
 
   if (plays.length === 0) {
     return (
-      <div>
-        <p style={{ color: "var(--axis-ink)", fontSize: 15, margin: 0 }}>No check plays.</p>
-        <p style={{ color: "var(--axis-muted)", fontSize: 13, margin: "4px 0 0" }}>Axis resolved all events automatically.</p>
+      <div className="cp-empty">
+        <p className="cp-empty-title">No check plays.</p>
+        <p className="cp-empty-sub">Axis resolved all events automatically.</p>
+        <style jsx>{`
+          .cp-empty { display: flex; flex-direction: column; gap: 4px; }
+          .cp-empty-title { color: var(--axis-ink); font-size: 15px; margin: 0; }
+          .cp-empty-sub { color: var(--axis-muted); font-size: 13px; margin: 0; }
+        `}</style>
       </div>
     );
   }
@@ -438,6 +520,7 @@ function CheckPlaysTab({
           {play.context && <p className="cp-context">{play.context}</p>}
           <div className="cp-actions">
             <button
+              type="button"
               className="cp-btn cp-btn--count"
               disabled={resolving === play.id}
               onClick={() => void resolve(play.id, "counted")}
@@ -445,6 +528,7 @@ function CheckPlaysTab({
               Counted
             </button>
             <button
+              type="button"
               className="cp-btn cp-btn--skip"
               disabled={resolving === play.id}
               onClick={() => void resolve(play.id, "skipped")}
@@ -453,6 +537,7 @@ function CheckPlaysTab({
             </button>
             {play.question.toLowerCase().includes("make") && (
               <button
+                type="button"
                 className="cp-btn cp-btn--miss"
                 disabled={resolving === play.id}
                 onClick={() => void resolve(play.id, "miss")}
@@ -501,13 +586,28 @@ function CheckPlaysTab({
 
 // ─── Press Pack Tab ───────────────────────────────────────────────────────────
 
-function PressPackTab({ pressPack, stats }: { pressPack: ClipPressPack | null; stats: ClipStatLines | null }) {
-  if (!pressPack && !stats) {
-    return <p style={{ color: "var(--axis-muted)", fontSize: 13 }}>Press Pack will be generated after processing.</p>;
+function PressPackTab({
+  pressPack,
+  stats,
+  isProcessing,
+  hasActivity,
+}: {
+  pressPack: ClipPressPack | null;
+  stats: ClipStatLines | null;
+  isProcessing: boolean;
+  hasActivity: boolean;
+}) {
+  if (!pressPack && (isProcessing || !hasActivity)) {
+    return (
+      <>
+        <p className="pp-waiting">Press Pack will generate after Activity is created.</p>
+        <style jsx>{`.pp-waiting { color: var(--axis-muted); font-size: 13px; line-height: 1.5; margin: 0; max-width: 40ch; }`}</style>
+      </>
+    );
   }
 
   const s = stats ?? pressPack?.statLines;
-  const statLine = s
+  const statLine = s && s.pts > 0
     ? `${s.pts} PTS · ${s.fgm}/${s.fga} FG · ${s.reb} REB · ${s.ast} AST`
     : null;
 
@@ -530,7 +630,7 @@ function PressPackTab({ pressPack, stats }: { pressPack: ClipPressPack | null; s
       )}
 
       {!pressPack?.headline && !pressPack?.summary && (
-        <p className="pp-muted">Generating narrative from your activity...</p>
+        <p className="pp-muted">Press Pack will generate after Activity is created.</p>
       )}
 
       <style jsx>{`
@@ -577,20 +677,4 @@ function eventLabel(type: string, shotZone: string | null, points: number) {
   if (type === "foul") return "Foul";
   if (type === "free_throw") return "Free throw";
   return type;
-}
-
-function stageLabel(stage: string | null) {
-  const labels: Record<string, string> = {
-    queued: "Queued",
-    waiting_for_video: "Waiting for video",
-    extracting_frames: "Extracting frames",
-    extracting_audio: "Extracting audio",
-    analyzing_frames: "Analyzing",
-    applying_basketball_logic: "Creating activity",
-    creating_check_plays: "Creating check plays",
-    generating_press_pack: "Generating press pack",
-    complete: "Complete",
-    failed: "Failed",
-  };
-  return stage ? (labels[stage] ?? stage) : "Processing";
 }

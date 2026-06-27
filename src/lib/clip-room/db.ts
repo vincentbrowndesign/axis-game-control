@@ -48,7 +48,7 @@ export async function createClipSource(record: {
   filename: string;
   fileSize: number;
   cloudflareUid: string;
-  uploadUrl: string;
+  videoUrl?: string | null;
 }) {
   const db = getDb();
   if (!db) return { error: "DB not configured", record: null };
@@ -61,8 +61,8 @@ export async function createClipSource(record: {
       filename: record.filename,
       file_size: record.fileSize,
       cloudflare_uid: record.cloudflareUid,
-      upload_url: record.uploadUrl,
-      status: "uploading",
+      video_url: record.videoUrl ?? null,
+      status: "uploaded",
       processing_progress: 0,
     })
     .select()
