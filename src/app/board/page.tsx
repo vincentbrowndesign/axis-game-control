@@ -390,6 +390,7 @@ export default function BoardPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          query: query.trim(),
           note: query.trim(),
           imageData,
           boardMarks,

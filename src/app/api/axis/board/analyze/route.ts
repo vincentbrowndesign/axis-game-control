@@ -168,13 +168,24 @@ export async function POST(request: Request) {
     boardMarks?: unknown;
     imageData?: string;
     note?: string;
+    query?: string;
   } | null;
 
-  if (!body || typeof body.note !== "string" || !body.note.trim()) {
-    return Response.json({ error: "note is required" }, { status: 400 });
+  if (!body) {
+    return Response.json({ error: "query is required" }, { status: 400 });
   }
 
-  const note = body.note.trim().slice(0, 1000);
+  const rawQuery = typeof body.query === "string"
+    ? body.query
+    : typeof body.note === "string"
+      ? body.note
+      : "";
+
+  if (!rawQuery.trim()) {
+    return Response.json({ error: "query is required" }, { status: 400 });
+  }
+
+  const note = rawQuery.trim().slice(0, 1000);
   const imageData = typeof body.imageData === "string" ? body.imageData : null;
   const marks = parseBoardMarks(body.boardMarks).slice(0, 200);
 
