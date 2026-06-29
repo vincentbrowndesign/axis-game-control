@@ -29,3 +29,11 @@ No complex agent system until the simple loop is real.
 ## First Win
 
 A coach can open AxisMeasure, add a player, upload one clip, get one clean read, save it, and know the next rep.
+
+## Reset Health
+
+branch: harden-axis-measure
+reset commit: f85f4a4
+working loop: upload -> read -> save -> next rep
+known limitation: localStorage/object URL clip persistence is not reload-proof
+next required upgrade: persistent clip storage and rep history

@@ -24,6 +24,7 @@ export function AxisMeasureFlow({ step }: { step: AxisMeasureStep }) {
   const [sessionType, setSessionType] = useState<AxisSessionType>("shooting");
   const [rep, setRep] = useState<AxisRep | null>(null);
   const [error, setError] = useState("");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -33,13 +34,18 @@ export function AxisMeasureFlow({ step }: { step: AxisMeasureStep }) {
         setPlayerName(current.playerName);
         setSessionType(current.sessionType);
       }
+      setHydrated(true);
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
   }, []);
 
   const ready = playerName.trim().length > 1;
-  const status = useMemo(() => getAxisMeasureStatus(rep, ready), [ready, rep]);
+  const nextRepReady = step === "result" && rep?.status === "saved";
+  const status = useMemo(() => getAxisMeasureStatus(rep, ready, nextRepReady), [nextRepReady, ready, rep]);
+  const hasSession = Boolean(rep?.playerName && rep.sessionType);
+  const hasClip = Boolean(rep?.clipUrl);
+  const hasRead = Boolean(rep?.read.summary);
 
   function persist(nextRep: AxisRep) {
     setRep(nextRep);
@@ -60,6 +66,11 @@ export function AxisMeasureFlow({ step }: { step: AxisMeasureStep }) {
   function handleClipUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null;
     if (!file) return;
+    if (!rep) {
+      setError("Start a session before adding a clip.");
+      router.push("/session/new");
+      return;
+    }
     if (file.size <= 0) {
       setError("This video did not load. Download it to your device, then choose it again.");
       return;
@@ -69,9 +80,8 @@ export function AxisMeasureFlow({ step }: { step: AxisMeasureStep }) {
       return;
     }
 
-    const current = rep ?? createAxisRep({ playerName: playerName || "Player", sessionType });
     const nextRep: AxisRep = {
-      ...current,
+      ...rep,
       clipUrl: URL.createObjectURL(file),
       status: "uploaded",
     };
@@ -175,16 +185,27 @@ export function AxisMeasureFlow({ step }: { step: AxisMeasureStep }) {
             <StepLabel label="Capture" />
             <h1 id="axis-measure-capture-title">Upload one clip.</h1>
             <p>Upload one clip. Get one read. Save the rep. Run the next one.</p>
-            <label className="axis-measure__upload">
-              <span>Choose Clip</span>
-              <input accept="video/*,.mov,.mp4" onChange={handleClipUpload} type="file" />
-            </label>
-            {error ? <p className="axis-measure__error">{error}</p> : null}
-            {rep?.clipUrl ? (
-              <Link className="axis-measure__secondary" href="/replay">
-                Review Replay
-              </Link>
-            ) : null}
+            {hydrated && !hasSession ? (
+              <EmptyState
+                body="Start with a player and session type so this clip has a rep to attach to."
+                href="/session/new"
+                label="Start Session"
+                title="No session loaded."
+              />
+            ) : (
+              <>
+                <label className="axis-measure__upload">
+                  <span>Choose Clip</span>
+                  <input accept="video/*,.mov,.mp4" disabled={!hydrated} onChange={handleClipUpload} type="file" />
+                </label>
+                {error ? <p className="axis-measure__error">{error}</p> : null}
+                {hasClip ? (
+                  <Link className="axis-measure__secondary" href="/replay">
+                    Review Replay
+                  </Link>
+                ) : null}
+              </>
+            )}
           </section>
         ) : null}
 
@@ -192,9 +213,25 @@ export function AxisMeasureFlow({ step }: { step: AxisMeasureStep }) {
           <section className="axis-measure__panel" aria-labelledby="axis-measure-replay-title">
             <StepLabel label="Replay" />
             <h1 id="axis-measure-replay-title">Review the clip.</h1>
-            {rep?.clipUrl ? <video controls playsInline src={rep.clipUrl} /> : <EmptyState href="/capture" label="Upload Clip" />}
+            {hydrated && !hasSession ? (
+              <EmptyState
+                body="Start with a player and session type before reviewing a clip."
+                href="/session/new"
+                label="Start Session"
+                title="No session loaded."
+              />
+            ) : hasClip ? (
+              <video controls playsInline src={rep?.clipUrl} />
+            ) : (
+              <EmptyState
+                body="Choose a clip first, then AxisMeasure can show the replay here."
+                href="/capture"
+                label="Upload Clip"
+                title="No clip loaded."
+              />
+            )}
             {error ? <p className="axis-measure__error">{error}</p> : null}
-            <button className="axis-measure__primary" disabled={!rep?.clipUrl} onClick={generateRead} type="button">
+            <button className="axis-measure__primary" disabled={!hasClip} onClick={generateRead} type="button">
               Generate Axis Read
             </button>
           </section>
@@ -204,23 +241,42 @@ export function AxisMeasureFlow({ step }: { step: AxisMeasureStep }) {
           <section className="axis-measure__panel" aria-labelledby="axis-measure-result-title">
             <StepLabel label="Axis Read" />
             <h1 id="axis-measure-result-title">Result.</h1>
-            {rep?.read.summary ? (
+            {hydrated && !hasSession ? (
+              <EmptyState
+                body="Start a rep first so the result has a player and session."
+                href="/session/new"
+                label="Start Session"
+                title="No session loaded."
+              />
+            ) : !hasClip ? (
+              <EmptyState
+                body="Upload a clip before asking AxisMeasure for a read."
+                href="/capture"
+                label="Upload Clip"
+                title="No clip loaded."
+              />
+            ) : hasRead ? (
               <div className="axis-measure__read">
-                <p>{rep.read.summary}</p>
+                <p>{rep?.read.summary}</p>
                 <div aria-label="Tags">
-                  {rep.read.tags.map((tag) => (
+                  {rep?.read.tags.map((tag) => (
                     <span key={tag}>{tag}</span>
                   ))}
                 </div>
                 <StepLabel label="Next Action" />
-                <strong>{rep.read.nextAction}</strong>
+                <strong>{rep?.read.nextAction}</strong>
               </div>
             ) : (
-              <EmptyState href="/replay" label="Generate Read" />
+              <EmptyState
+                body="Generate the read from the replay screen, then the result will appear here."
+                href="/replay"
+                label="Generate Read"
+                title="No Axis read yet."
+              />
             )}
             {rep?.status === "saved" ? <p className="axis-measure__saved">NEXT REP</p> : null}
             <div className="axis-measure__actions">
-              <button className="axis-measure__primary" disabled={!rep?.read.summary} onClick={saveRep} type="button">
+              <button className="axis-measure__primary" disabled={!hasRead} onClick={saveRep} type="button">
                 Save Rep
               </button>
               <button className="axis-measure__secondary" onClick={nextRep} type="button">
@@ -412,6 +468,10 @@ export function AxisMeasureFlow({ step }: { step: AxisMeasureStep }) {
           position: absolute;
         }
 
+        .axis-measure__upload input:disabled {
+          cursor: wait;
+        }
+
         video {
           aspect-ratio: 16 / 9;
           background: #050706;
@@ -487,13 +547,21 @@ function StepLabel({ label }: { label: string }) {
   return <span>{label}</span>;
 }
 
-function EmptyState({ href, label }: { href: string; label: string }) {
+function EmptyState({ body, href, label, title }: { body: string; href: string; label: string; title: string }) {
   return (
     <div className="axis-measure__read">
-      <p>No clip signal yet.</p>
+      <p>{title}</p>
+      <small>{body}</small>
       <Link className="axis-measure__secondary" href={href}>
         {label}
       </Link>
+      <style jsx>{`
+        small {
+          color: rgba(245, 242, 232, 0.66);
+          font-size: 0.92rem;
+          line-height: 1.35;
+        }
+      `}</style>
     </div>
   );
 }

@@ -15,6 +15,8 @@ export type AxisRep = {
   createdAt: string;
 };
 
+export type AxisMeasureStatus = "EMPTY" | "READY" | "UPLOADED" | "READING" | "REVIEWED" | "SAVED" | "NEXT REP";
+
 export const axisSessionTypes: { label: string; value: AxisSessionType }[] = [
   { label: "Shooting", value: "shooting" },
   { label: "Handle", value: "handle" },
@@ -72,9 +74,10 @@ export function getAxisRead(sessionType: AxisSessionType): AxisRep["read"] {
   };
 }
 
-export function getAxisMeasureStatus(rep: AxisRep | null, ready = false) {
-  if (!rep) return ready ? "READY" : "NO SIGNAL";
-  if (rep.status === "empty") return ready ? "READY" : "NO SIGNAL";
+export function getAxisMeasureStatus(rep: AxisRep | null, ready = false, nextRep = false): AxisMeasureStatus {
+  if (nextRep) return "NEXT REP";
+  if (!rep) return ready ? "READY" : "EMPTY";
+  if (rep.status === "empty") return ready ? "READY" : "EMPTY";
   if (rep.status === "uploaded") return "UPLOADED";
   if (rep.status === "reading") return "READING";
   if (rep.status === "reviewed") return "REVIEWED";
@@ -87,8 +90,8 @@ export function readCurrentAxisRep(): AxisRep | null {
   if (!raw) return null;
 
   try {
-    const parsed = JSON.parse(raw) as AxisRep;
-    if (!parsed || typeof parsed.id !== "string") return null;
+    const parsed = JSON.parse(raw) as Partial<AxisRep>;
+    if (!isAxisRep(parsed)) return null;
     return parsed;
   } catch {
     return null;
@@ -109,4 +112,29 @@ export function clearCurrentAxisRep() {
 function createId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
   return `rep-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function isAxisRep(value: Partial<AxisRep>): value is AxisRep {
+  return (
+    typeof value.id === "string" &&
+    typeof value.playerName === "string" &&
+    value.playerName.trim().length > 0 &&
+    isAxisSessionType(value.sessionType) &&
+    isAxisRepStatus(value.status) &&
+    typeof value.createdAt === "string" &&
+    (value.source === "mock" || value.source === "vision" || value.source === "manual") &&
+    typeof value.read?.summary === "string" &&
+    Array.isArray(value.read.tags) &&
+    value.read.tags.every((tag) => typeof tag === "string") &&
+    typeof value.read.nextAction === "string" &&
+    (typeof value.clipUrl === "undefined" || typeof value.clipUrl === "string")
+  );
+}
+
+function isAxisSessionType(value: unknown): value is AxisSessionType {
+  return value === "shooting" || value === "handle" || value === "finish" || value === "defense";
+}
+
+function isAxisRepStatus(value: unknown): value is AxisRep["status"] {
+  return value === "empty" || value === "uploaded" || value === "reading" || value === "reviewed" || value === "saved";
 }
