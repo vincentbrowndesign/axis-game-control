@@ -1,66 +1,36 @@
-# Axis
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-Axis is a basketball session memory system.
+## Getting Started
 
-Axis captures any basketball session, turns what happened into structured memory, and helps the user search, review, correct, export, and build from it.
-
-## Current Product Truth
-
-The first product win is:
-
-```text
-Open phone
--> sign in
--> start session
--> type / talk / tap moment
--> end session
--> memory exists
-```
-
-The capture screen is not the whole product. The product is the memory system created from the session.
-
-## Active Surface
-
-- Main route: `/axis`
-- Session draft API: `/api/axis/sessions`
-- Build map route: `/axis/build-map`
-
-## What Axis Is Now
-
-- a mobile-first basketball session capture surface
-- a structured session memory loop
-- a system for creating searchable, reviewable, correctable memory
-- useful even when camera, voice, AI, or internet are imperfect
-
-## What Axis Is Not
-
-- a debug dashboard
-- a raw AI camera demo
-- a provider/API menu
-- a stat tracker first
-- a desktop analytics workspace
-- a CV or video product first
-
-## Source Of Truth
-
-Start here:
-
-1. `docs/AXIS_INDEX.md`
-2. `docs/AXIS_PRODUCT_MAP.md`
-3. `docs/AXIS_BUILD_MAP.md`
-4. `docs/AXIS_DESIGN_CONSTITUTION.md`
-5. `docs/AXIS_MOBILE_PRIORITY.md`
-
-## Development
+First, run the development server:
 
 ```bash
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-Open `http://localhost:3000/axis`.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Boundaries
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-Preserved backend infrastructure may exist for video, CV, artifacts, auth, jobs, exports, and processing.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-Do not expose those systems on the main user surface unless the active build map explicitly unlocks that layer.
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
