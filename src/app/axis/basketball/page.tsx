@@ -2,35 +2,35 @@ import Link from "next/link";
 
 const dashboardSections = [
   {
-    title: "Start Body Session",
+    title: "Start Full Body Session",
     status: "Ready",
-    items: ["Choose front or rear camera", "Open camera", "Step into frame"],
-    action: { href: "/", label: "Open Body Tracker" },
+    items: ["Choose front or rear camera", "Open camera", "Step fully into frame"],
+    action: { href: "/", label: "Open Full Body Tracker" },
+  },
+  {
+    title: "Full Body Gate",
+    status: "Empty",
+    items: ["Head visible", "Lower body visible", "Feet visible"],
   },
   {
     title: "Pose Overlay",
     status: "Empty",
-    items: ["Head point", "Skeleton lines", "Base line"],
+    items: ["Head point", "Full skeleton", "Base line"],
   },
   {
-    title: "Body Context",
+    title: "Full Body Reads",
     status: "Empty",
-    items: ["Landmark timeline", "Body center", "Movement quality"],
+    items: ["Stance", "Balance", "Knee bend"],
   },
   {
     title: "AI Body Feed",
     status: "Waiting",
-    items: ["Video plus pose timeline later", "No fake reads", "No manual tags first"],
-  },
-  {
-    title: "Future Court Layers",
-    status: "Later",
-    items: ["Court zones", "Spacing shapes", "Tactical overlays"],
+    items: ["Full-body landmark timeline later", "No fake reads", "No manual tags first"],
   },
   {
     title: "Future Review",
     status: "Later",
-    items: ["Coach review after AI output", "Clips after reviewed moments", "Reports after evidence exists"],
+    items: ["Body read review after AI output", "Reports after evidence exists", "No clip-first workflow"],
   },
 ];
 
@@ -40,16 +40,16 @@ export default function AxisBasketballDashboard() {
       <section className="basketball-dashboard-stack">
         <header className="basketball-dashboard-header">
           <p>Axis Basketball</p>
-          <h1>Body Board</h1>
-          <span>Camera + pose overlay + body context</span>
+          <h1>Full Body Board</h1>
+          <span>Camera + full-body gate + pose context</span>
         </header>
 
         <section className="dashboard-primary-card">
           <div>
             <p>Current product path</p>
-            <strong>Start with the athlete&apos;s body.</strong>
+            <strong>Start with the full athlete, head to toe.</strong>
           </div>
-          <Link href="/">Open body tracker</Link>
+          <Link href="/">Open full body tracker</Link>
         </section>
 
         <section className="dashboard-grid">

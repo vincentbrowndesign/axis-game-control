@@ -1,4 +1,4 @@
-# Axis Basketball Body-First Cleanup Report
+# Axis Basketball Full-Body-First Cleanup Report
 
 ## Deleted files
 
@@ -65,7 +65,7 @@
 
 ## Kept files
 
-- `src/components/AxisBodyTracker.tsx`
+- `src/components/AxisFullBodyTracker.tsx`
 - `src/app/page.tsx`
 - `src/app/api/basketball/sessions/create/route.ts`
 - `src/lib/supabase-server.ts`
@@ -77,7 +77,7 @@
 
 - The original migration remains in history; a cleanup migration drops the wrong overlay/event/clip tables and creates body-first tables.
 - The session API still uses the existing `basketball_sessions` table until body session persistence is built.
-- Body context is currently localStorage only.
+- Full-body context is currently localStorage only.
 
 ## Checks run
 
@@ -94,4 +94,4 @@
 
 ## Next safe step
 
-- Add authenticated body session and pose sample persistence after the body tracker MVP is stable.
+- Add authenticated full-body session and pose sample persistence after the full-body tracker MVP is stable.

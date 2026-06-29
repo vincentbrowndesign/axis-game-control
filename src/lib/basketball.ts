@@ -1,8 +1,23 @@
 export type BasketballSessionType = "training" | "practice" | "game" | "workout";
 
-export type CameraFacing = "user" | "environment";
+export type CameraFacing = "front" | "rear";
 
-export type BodyReadValue =
+export type FullBodyFrameStatus = {
+  bodyDetected: boolean;
+  fullBodyVisible: boolean;
+  upperBodyVisible: boolean;
+  lowerBodyVisible: boolean;
+  feetVisible: boolean;
+  leftSideVisible: boolean;
+  rightSideVisible: boolean;
+  confidence: number;
+  message: string;
+};
+
+export type FullBodyReadValue =
+  | "full body"
+  | "partial body"
+  | "no body"
   | "narrow"
   | "normal"
   | "wide"
@@ -15,51 +30,73 @@ export type BodyReadValue =
   | "low"
   | "medium"
   | "high"
+  | "level"
+  | "tilted left"
+  | "tilted right"
   | "upright"
   | "forward lean"
   | "backward lean"
   | "stable";
 
-export type BodyReads = {
-  stance: BodyReadValue;
-  balance: BodyReadValue;
-  kneeBend: BodyReadValue;
-  hipLevel: BodyReadValue;
-  shoulderLevel: BodyReadValue;
-  torsoLean: BodyReadValue;
-  bodyCenter: BodyReadValue;
-  movementQuality: BodyReadValue;
-};
-
-export type BodyPoint = {
-  x: number;
-  y: number;
-  z?: number;
-  confidence: number;
-};
-
-export type BasketballBodyFrame = {
-  timestamp: number;
+export type AxisFullBodyFrame = {
+  sessionId: string;
+  timestampMs: number;
   cameraFacing: CameraFacing;
-  bodyDetected: boolean;
-  landmarks: Record<string, BodyPoint>;
-  landmarkConfidence: number;
-  bodyCenter: BodyPoint | null;
-  shoulderLineAngle: number | null;
-  hipLineAngle: number | null;
-  spineAngle: number | null;
-  torsoLean: BodyReadValue;
-  stanceWidth: BodyReadValue;
-  balanceEstimate: BodyReadValue;
-  kneeAngles: { left: number | null; right: number | null };
-  hipAngles: { left: number | null; right: number | null };
-  elbowAngles: { left: number | null; right: number | null };
-  verticalChange: number;
-  lateralChange: number;
-  bodyCenterVelocity: number;
-  kneeBendChange: number;
-  hipDropChange: number;
-  reads: BodyReads;
+  frameStatus: Omit<FullBodyFrameStatus, "message">;
+  landmarks: Array<{
+    name: string;
+    x: number;
+    y: number;
+    z?: number;
+    visibility?: number;
+  }>;
+  bodyStructure: {
+    bodyCenter?: { x: number; y: number };
+    shoulderLineAngle?: number;
+    hipLineAngle?: number;
+    spineAngle?: number;
+    headOverHips?: "stacked" | "forward" | "back" | "left" | "right";
+    torsoLean?: "upright" | "forward" | "backward" | "left" | "right";
+    bodyHeightEstimate?: number;
+  };
+  base: {
+    stanceWidth?: "narrow" | "normal" | "wide";
+    leftFootVisible: boolean;
+    rightFootVisible: boolean;
+    baseStable?: boolean;
+    balance?: "balanced" | "left-heavy" | "right-heavy" | "forward" | "backward" | "unstable";
+  };
+  jointAngles: {
+    leftKnee?: number;
+    rightKnee?: number;
+    leftHip?: number;
+    rightHip?: number;
+    leftAnkle?: number;
+    rightAnkle?: number;
+    leftElbow?: number;
+    rightElbow?: number;
+    leftShoulder?: number;
+    rightShoulder?: number;
+  };
+  movement: {
+    bodyCenterVelocity?: number;
+    verticalChange?: number;
+    lateralChange?: number;
+    kneeBendChange?: number;
+    hipDropChange?: number;
+    footPlantChange?: string;
+  };
+  reads: {
+    frameRead: "no_body" | "partial_body" | "full_body";
+    stanceRead?: string;
+    balanceRead?: string;
+    kneeBendRead?: string;
+    hipLevelRead?: string;
+    shoulderLevelRead?: string;
+    torsoLeanRead?: string;
+    movementQualityRead?: string;
+    notes: string[];
+  };
 };
 
 export type BasketballSession = {

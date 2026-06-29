@@ -1,5 +1,5 @@
-import { AxisBodyTracker } from "@/components/AxisBodyTracker";
+import { AxisFullBodyTracker } from "@/components/AxisFullBodyTracker";
 
 export default function Home() {
-  return <AxisBodyTracker />;
+  return <AxisFullBodyTracker />;
 }

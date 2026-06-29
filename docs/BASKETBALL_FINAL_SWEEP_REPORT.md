@@ -4,15 +4,16 @@ Sweep date: 2026-06-29
 
 ## Current MVP
 
-Axis Basketball is body-first:
+Axis Basketball is full-body-first:
 
-- start body session
+- start full body session
 - choose front or rear camera
 - open camera
-- detect one body
-- draw pose landmarks
-- show simple body reads
-- save body context locally for future AI
+- check full body visibility
+- detect one full body
+- draw full-body pose landmarks
+- show simple full-body reads only when the gate passes
+- save full-body context locally for future AI
 
 ## Removed From MVP
 
@@ -25,16 +26,16 @@ Axis Basketball is body-first:
 
 ## Kept
 
-- `src/components/AxisBodyTracker.tsx`
-- root `/` body tracker
-- `/axis/basketball` body-first status board
-- local body context storage
-- body-first docs
+- `src/components/AxisFullBodyTracker.tsx`
+- root `/` full body tracker
+- `/axis/basketball` full-body status board
+- local full-body context storage
+- full-body-first docs
 - body-first cleanup migration
 
 ## Known Limitations
 
-- body context is localStorage only
+- full-body context is localStorage only
 - persistent storage is not wired
 - recording is not wired
 - AI body reads are not built

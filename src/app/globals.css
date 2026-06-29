@@ -298,6 +298,14 @@ button {
   text-transform: capitalize;
 }
 
+.frame-message {
+  color: rgba(248, 250, 252, 0.74);
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 0;
+}
+
 .dashboard-primary-card strong {
   display: block;
   font-size: 1.25rem;
