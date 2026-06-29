@@ -1,7 +1,7 @@
 # Axis Basketball Build Guardrails
 
 Purpose:
-This document protects the Axis Basketball build from hallucination, clutter, duplicate files, fake progress, noisy UI, and premature overbuilding.
+Protect the Axis Basketball build from fake progress, tactical clutter, premature court overlays, manual tagging, and unsupported AI claims.
 
 ## 1. Product Truth
 
@@ -9,104 +9,160 @@ Axis Basketball is:
 
 ```text
 camera-first
-overlay-first
-AI-tagging-later
+body-first
+pose-overlay-first
+AI-body-feed-first
 coach-review-after-AI
 ```
 
-The correct sequence is:
+The correct MVP sequence is:
 
 ```text
-camera
--> overlay
--> overlay calibration
--> recording with overlay context
--> AI analyzes video + overlay
--> AI creates event candidates
--> coach reviews AI output
--> clips/reports later
+turn Axis on
+-> choose front or rear camera
+-> camera opens
+-> Axis reads the body
+-> Axis tracks body landmarks
+-> Axis generates simple body reads
+-> Axis saves body context for AI later
 ```
 
 Do not change this order unless the user explicitly asks.
 
-## 2. Do Not Build Yet
+## 2. Do Not Build In The MVP
 
-Do not build these first:
+Do not make the MVP about:
 
-- video upload
+- court zones
+- Delta offense
+- shot charts
+- horns
+- 5-out
+- spacing shapes
+- tactical overlays
 - manual live tagging buttons
 - coach tag panels
+- fake AI event panels
 - automatic stat claims
 - make/miss automation
-- full player identity
-- reports
-- clip generation
+- clip generation buttons
 - dashboards full of fake data
-- complex analytics
-- custom AI models
-- ShotTracker integration
-- Mux integration
-- Deepgram/ElevenLabs voice loops
 
 These may exist as future notes only.
 
-## 3. No Hallucination Rules
+## 3. Body Tracker Rules
+
+The first useful screen should be:
+
+```text
+Start Body Session
+Choose Camera: Front / Rear
+Turn On Camera
+Step Into Frame
+Body Detected
+Pose Overlay Active
+Body Read Active
+```
+
+Axis should use coach/player language:
+
+- Body detected
+- Reading stance
+- Reading balance
+- Step fully into frame
+- Move camera back
+- Need more light
+- Pose confidence low
+- Body read active
+
+Do not show internal language like:
+
+- pose_json
+- landmark index
+- metadata
+- model inference
+- AI candidate
+- database row
+
+## 4. Simple Reads Only
+
+Show readable outputs:
+
+- Stance
+- Balance
+- Knee Bend
+- Hip Level
+- Shoulder Level
+- Torso Lean
+- Body Center
+- Movement Quality
+
+Use simple values:
+
+- narrow / normal / wide
+- balanced / left-heavy / right-heavy / forward / backward / unstable
+- low / medium / high
+- upright / forward lean / backward lean
+- stable / unstable
+
+Do not claim advanced reads until implemented.
+
+## 5. Data Rules
+
+The AI will eventually learn from:
+
+```text
+video
++ pose landmark timeline
++ body read timeline
+```
+
+Early data should be body context:
+
+- timestamp
+- camera facing
+- body detected
+- landmark coordinates
+- landmark confidence
+- body center
+- shoulder line angle
+- hip line angle
+- spine angle
+- torso lean
+- stance width
+- balance estimate
+- knee angles
+- hip angles
+- elbow angles
+- movement deltas
+
+Court overlay configs are future-layer context, not MVP context.
+
+## 6. No Hallucination Rules
 
 Before creating or editing code:
 
 1. Inspect the existing project structure.
-2. Reuse existing patterns, components, routes, auth helpers, Supabase clients, and styling conventions.
-3. Do not invent files, routes, components, or libraries that do not fit the repo.
-4. Do not claim a feature is working unless it is actually wired.
-5. Do not say "AI detects" unless there is real AI code.
-6. Do not say "saved" unless data is actually persisted.
-7. Do not say "recorded" unless MediaRecorder or storage behavior exists.
-8. If uncertain, write a TODO or limitation instead of pretending.
-9. Keep mocks clearly labeled as mocks.
-10. Keep future capabilities clearly labeled as future.
+2. Reuse existing patterns.
+3. Do not claim a feature is working unless it is actually wired.
+4. Do not say "AI detects" unless there is real AI code.
+5. Do not say "saved" unless data is actually persisted or clearly local.
+6. If uncertain, write a limitation instead of pretending.
 
 Use this wording when needed:
 
 ```text
 Not implemented yet.
-Placeholder only.
 Future phase.
-Mock data.
-Requires real camera permission.
-Requires recording/storage wiring.
+Requires camera permission.
+Requires better light.
+Requires persistent storage later.
 Requires AI worker later.
 ```
 
-## 4. No Clutter Rules
+## 7. UI Rules
 
-Keep the build clean.
-
-Do not create:
-
-- duplicate docs explaining the same thing
-- multiple versions of the same component
-- unnecessary helper files
-- giant dashboards
-- noisy cards
-- too many buttons
-- fake stat sections
-- fake AI insights
-- unused routes
-- unused tables
-- unused packages
-- decorative UI that does not help the coach
-
-Every file must answer:
-
-```text
-What product step does this serve?
-Is it needed now?
-Can it be simpler?
-```
-
-## 5. UI Rules
-
-Axis Basketball UI should feel like a sideline tool, not a SaaS analytics wall.
+Axis Basketball UI should feel like a sideline body-reading tool.
 
 Rules:
 
@@ -115,121 +171,24 @@ Rules:
 - big tap targets
 - minimal text
 - dark/simple camera-first layout
-- organized empty states
+- pose overlay above live camera
 - no crowded dashboards
 - no fake activity feeds
-- no fake "insights"
+- no fake insights
 - no stat cards until real data exists
 
-The first useful screen should be:
+## 8. Final Guardrail
 
-```text
-Start Session
-Open Camera
-Choose Overlay
-Calibrate Overlay
-Save Overlay
-```
-
-## 6. Data Rules
-
-Database work must support the build order.
-
-Required early data:
-
-- sessions
-- overlay presets
-- overlay configs
-- overlay calibration
-- recordings later
-
-AI/event tables are allowed only as future-ready structure.
-
-Do not make manual tagging the center of the schema.
-
-AI event candidates should come later from:
-
-```text
-recording + overlay_config + detections + AI reasoning
-```
-
-## 7. Overlay Rules
-
-The overlay is not decoration.
-
-The overlay is the basketball context map for AI.
-
-Overlay configs should store:
-
-- overlay type
-- opacity
-- transform
-- calibration
-- settings
-- session id
-- user id
-
-Overlays should support:
-
-- court zones
-- Delta offense
-- shot chart
-- spacing shapes
-
-Do not overbuild the overlay with complex animation or analytics first.
-
-## 8. Implementation Rules
-
-For every build step:
-
-1. Make the smallest useful version.
-2. Keep the file count low.
-3. Prefer one clean component over many fragments.
-4. Prefer existing project style over new styling systems.
-5. Do not install new packages unless required.
-6. Keep auth and RLS respected.
-7. Do not allow signed-out writes.
-8. Add clear empty/error/loading states.
-9. Do not break existing Axis routes.
-10. Return a short summary of what changed.
-
-## 9. Response Format After Each Build Prompt
-
-After executing a prompt, respond with:
-
-```text
-Built:
-- ...
-
-Changed files:
-- ...
-
-Not built yet:
-- ...
-
-Known limitations:
-- ...
-
-Next safe step:
-- ...
-```
-
-Do not give a long essay.
-Do not claim future work is complete.
-Do not hide limitations.
-
-## 10. Final Guardrail
-
-If a prompt asks for something that conflicts with this document, follow this document first and explain the conflict briefly.
-
-Axis Basketball must stay:
+Axis Basketball MVP must stay:
 
 ```text
 simple
 real
 camera-first
-overlay-first
-low-noise
-no fake AI
+body-first
+pose-overlay-first
+AI-body-feed-first
+no court overlay MVP
 no manual tagging first
+no fake AI
 ```

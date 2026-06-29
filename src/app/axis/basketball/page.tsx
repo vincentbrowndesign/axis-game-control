@@ -2,35 +2,35 @@ import Link from "next/link";
 
 const dashboardSections = [
   {
-    title: "Start Camera Session",
+    title: "Start Body Session",
     status: "Ready",
-    items: ["New session", "Open camera", "Choose overlay"],
-    action: { href: "/", label: "Open Camera" },
+    items: ["Choose front or rear camera", "Open camera", "Step into frame"],
+    action: { href: "/", label: "Open Body Tracker" },
   },
   {
-    title: "Overlay Setup",
+    title: "Pose Overlay",
     status: "Empty",
-    items: ["Active overlay appears after setup", "Calibration status appears after save", "Saved configs appear after persistence"],
+    items: ["Head point", "Skeleton lines", "Base line"],
   },
   {
-    title: "Recordings",
+    title: "Body Context",
     status: "Empty",
-    items: ["Recent recordings appear after capture", "Recording status is local first", "Overlay attachment is required"],
+    items: ["Landmark timeline", "Body center", "Movement quality"],
   },
   {
-    title: "AI Analysis",
+    title: "AI Body Feed",
     status: "Waiting",
-    items: ["Run analysis after recording storage exists", "Suggested moments appear after worker output", "Needs review appears after Axis suggestions"],
+    items: ["Video plus pose timeline later", "No fake reads", "No manual tags first"],
   },
   {
-    title: "Reviewed Events",
-    status: "Empty",
-    items: ["Approved AI events", "Corrected AI events", "Rejected AI events"],
+    title: "Future Court Layers",
+    status: "Later",
+    items: ["Court zones", "Spacing shapes", "Tactical overlays"],
   },
   {
-    title: "Clips",
-    status: "Empty",
-    items: ["Generated only from reviewed events", "No manual clip tagging", "Clip storage comes later"],
+    title: "Future Review",
+    status: "Later",
+    items: ["Coach review after AI output", "Clips after reviewed moments", "Reports after evidence exists"],
   },
 ];
 
@@ -40,16 +40,16 @@ export default function AxisBasketballDashboard() {
       <section className="basketball-dashboard-stack">
         <header className="basketball-dashboard-header">
           <p>Axis Basketball</p>
-          <h1>Session Board</h1>
-          <span>Camera + overlay + AI review</span>
+          <h1>Body Board</h1>
+          <span>Camera + pose overlay + body context</span>
         </header>
 
         <section className="dashboard-primary-card">
           <div>
             <p>Current product path</p>
-            <strong>Start with live camera context.</strong>
+            <strong>Start with the athlete&apos;s body.</strong>
           </div>
-          <Link href="/">Open camera overlay</Link>
+          <Link href="/">Open body tracker</Link>
         </section>
 
         <section className="dashboard-grid">

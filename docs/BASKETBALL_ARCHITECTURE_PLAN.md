@@ -3,96 +3,86 @@
 Architecture:
 
 - camera-first
-- overlay-first
-- AI-tagging-first
-
-Core stack:
-
-- Next.js frontend/control layer
-- Browser `getUserMedia` for live camera
-- Canvas/SVG for overlay
-- Supabase/Postgres for sessions and overlay configs
-- Browser `MediaRecorder` for recording later
-- storage later
-- FastAPI/Python later for AI worker
-- OpenCV/YOLO later for detection
-- OpenAI/Google AI later for overlay-aware event labeling
+- body-first
+- pose-overlay-first
+- AI-body-feed-first
 
 ## 1. Product Purpose
 
-Axis Basketball lets a coach open a camera and place basketball intelligence on top of live reality. The overlay becomes context for AI.
+Axis Basketball lets a coach or player open a camera and turn live body movement into structured basketball context.
 
-The first useful product is not upload analysis, manual tagging, or an AI report. The first useful product is a live camera view with a basketball-aware overlay that can be adjusted and saved.
+The first useful layer is the athlete's body, not court space. Axis reads pose landmarks, tracks body context over time, and creates a body timeline that future AI can use with video.
 
 ## 2. Build Sequence
 
-Use this exact sequence:
+Use this sequence:
 
-- Camera preview
-- Overlay system
-- Overlay calibration
-- Save overlay setup
-- Camera recording
-- Save recording with overlay context
-- Frame extraction
-- AI detection
-- Overlay-aware AI event tagging
-- AI event review
-- Clips
-- Reports
+- Start body session
+- Choose front or rear camera
+- Open camera preview
+- Detect one body
+- Draw pose landmarks on the live camera
+- Track body frames over time
+- Generate simple body reads
+- Save body context locally first
+- Add persistent body timeline storage later
+- Add recording later
+- Add AI body read analysis later
+- Add coach review later
+- Add reports only after real body evidence exists
 
 ## 3. First API Routes
 
-- `POST /api/basketball/sessions/create`
-- `GET /api/basketball/sessions`
-- `GET /api/basketball/sessions/:id`
-- `POST /api/basketball/overlays/save`
-- `GET /api/basketball/overlays/:session_id`
-- `POST /api/basketball/overlays/reset`
+The first MVP can run locally in the browser. Server routes should wait until persistence is needed.
 
-These routes support session creation and saved overlay setup. They do not need video upload, AI, detection, clips, or reports.
+Future body routes:
+
+- `POST /api/basketball/body/sessions/create`
+- `POST /api/basketball/body/frames/save`
+- `GET /api/basketball/body/frames/:session_id`
+- `POST /api/basketball/body/reads/save`
+
+Court overlay routes were removed from the MVP path.
 
 ## 4. Later API Routes
 
-- `POST /api/basketball/recordings/create`
-- `POST /api/basketball/recordings/complete`
-- `POST /api/basketball/frames/extract`
-- `POST /api/basketball/ai/analyze`
-- `GET /api/basketball/ai/events/:session_id`
-- `POST /api/basketball/ai/events/:id/review`
-- `POST /api/basketball/clips/generate`
-- `GET /api/basketball/reports/:session_id`
+- `POST /api/basketball/body/analyze`
+- `GET /api/basketball/body/reads/:session_id`
+- `POST /api/basketball/body/review`
 
-These routes should wait until the live camera and overlay system are stable.
+These routes should wait until live pose tracking and body context are stable.
 
 ## 5. Data Objects
 
 - Player
-- Session
-- OverlayPreset
-- OverlayConfig
-- OverlayTransform
+- BodySession
+- CameraFacing
+- BodyFrame
+- PoseLandmark
+- BodyCenter
+- BodyRead
+- BodyReadTimeline
 - Recording
-- FrameSample
-- Detection
-- AIEventCandidate
-- ReviewedEvent
-- ShotAttempt
-- Clip
+- BodyReadCandidate
+- ReviewedBodyRead
 - CoachNote
 
 ## 6. MVP Rule
 
 First version only needs:
 
-- session creation
+- session start
+- front/rear camera choice
 - camera preview
-- overlay display
-- overlay controls
-- saved overlay configs
+- body detection
+- pose overlay
+- simple body reads
+- local body frame timeline
 
-No upload.
+No court overlays in the MVP.
 
 No manual tags.
 
-No AI yet.
+No fake AI.
+
+No clips or reports yet.

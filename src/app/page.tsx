@@ -1,5 +1,5 @@
-import { BasketballCameraOverlay } from "@/components/BasketballCameraOverlay";
+import { AxisBodyTracker } from "@/components/AxisBodyTracker";
 
 export default function Home() {
-  return <BasketballCameraOverlay />;
+  return <AxisBodyTracker />;
 }
