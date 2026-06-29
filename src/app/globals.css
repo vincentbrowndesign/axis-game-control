@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050706;
+  --foreground: #f5f2e8;
 }
 
 @theme inline {
@@ -12,15 +12,224 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
+
+.axis-shell {
+  background:
+    radial-gradient(circle at top right, rgba(84, 110, 92, 0.2), transparent 34rem),
+    #050706;
+  color: #f5f2e8;
+  min-height: 100dvh;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+}
+
+.axis-panel {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0 auto;
+  max-width: 520px;
+  width: 100%;
+}
+
+.axis-header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.4rem 0 0.8rem;
+}
+
+.axis-header p,
+.axis-label,
+label span {
+  color: rgba(245, 242, 232, 0.6);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.axis-header h1 {
+  font-size: clamp(2.2rem, 12vw, 4.2rem);
+  letter-spacing: -0.06em;
+  line-height: 0.9;
+  margin: 0.35rem 0 0;
+  max-width: 8ch;
+}
+
+.axis-header span {
+  border: 1px solid rgba(245, 242, 232, 0.18);
+  border-radius: 999px;
+  color: #f5f2e8;
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 900;
+  padding: 0.5rem 0.65rem;
+}
+
+.axis-section {
+  background: rgba(14, 17, 16, 0.92);
+  border: 1px solid rgba(245, 242, 232, 0.12);
+  border-radius: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+}
+
+label {
+  display: grid;
+  gap: 0.5rem;
+}
+
+input[type="text"],
+input:not([type]) {
+  background: #171c1a;
+  border: 1px solid rgba(245, 242, 232, 0.14);
+  border-radius: 0.8rem;
+  color: #f5f2e8;
+  min-height: 3.2rem;
+  padding: 0 0.9rem;
+}
+
+input:disabled {
+  opacity: 0.64;
+}
+
+.axis-grid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.axis-grid button,
+.axis-primary,
+.axis-secondary,
+.axis-upload {
+  align-items: center;
+  border-radius: 0.85rem;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.85rem;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 3.1rem;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.axis-grid button,
+.axis-secondary {
+  background: #171c1a;
+  border: 1px solid rgba(245, 242, 232, 0.14);
+  color: #f5f2e8;
+}
+
+.axis-grid button.selected,
+.axis-primary,
+.axis-upload {
+  background: #f5f2e8;
+  color: #050706;
+}
+
+button:disabled,
+.axis-upload.disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.axis-upload {
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-upload input {
+  cursor: pointer;
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+}
+
+.axis-file,
+.axis-helper,
+.axis-empty p {
+  color: rgba(245, 242, 232, 0.68);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+video {
+  aspect-ratio: 16 / 9;
+  background: #020302;
+  border: 1px solid rgba(245, 242, 232, 0.14);
+  border-radius: 0.9rem;
+  object-fit: contain;
+  width: 100%;
+}
+
+.axis-empty,
+.axis-read {
+  background: #111513;
+  border: 1px solid rgba(245, 242, 232, 0.1);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem;
+}
+
+.axis-empty strong,
+.axis-read p,
+.axis-read strong {
+  margin: 0;
+}
+
+.axis-read p {
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.axis-read strong {
+  color: #cce9a7;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.axis-actions {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (min-width: 720px) {
+  .axis-shell {
+    padding: 2rem;
+  }
+
+  .axis-panel {
+    max-width: 620px;
+  }
 }
