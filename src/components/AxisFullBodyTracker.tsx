@@ -12,6 +12,26 @@ import { type AxisFullBodyAIContext } from "@/lib/basketball";
 type CameraFacing = "front" | "rear";
 type CameraState = "idle" | "requesting" | "switching" | "ready" | "error" | "denied";
 type PoseState = "idle" | "loading" | "no-body" | "partial" | "full" | "low-confidence" | "error";
+type RoboflowModel = "sam2" | "yolo_world" | "qwen_vl";
+type RoboflowState = "idle" | "testing-sam2" | "testing-yolo" | "testing-qwen" | "error" | "received";
+type AxisVisionContextFrame = {
+  timestampMs: number;
+  cameraFacing: CameraFacing;
+  bodyContext: {
+    bodyDetected: boolean;
+    fullBodyVisible: boolean;
+    poseConfidence?: number;
+    stanceRead?: string;
+    balanceRead?: string;
+    kneeBendRead?: string;
+    torsoLeanRead?: string;
+  };
+  roboflow: {
+    sam2?: unknown;
+    yoloWorld?: unknown;
+    qwenVl?: unknown;
+  };
+};
 type ReadValue =
   | "full body"
   | "partial body"
@@ -187,6 +207,7 @@ const defaultStatus: FullBodyFrameStatus = {
 export function AxisFullBodyTracker() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -205,6 +226,8 @@ export function AxisFullBodyTracker() {
   const [latestFrame, setLatestFrame] = useState<AxisFullBodyFrame | null>(null);
   const [aiContext, setAiContext] = useState<AxisFullBodyAIContext | null>(null);
   const [cameraMessage, setCameraMessage] = useState("Camera off");
+  const [roboflowState, setRoboflowState] = useState<RoboflowState>("idle");
+  const [visionContextFrame, setVisionContextFrame] = useState<AxisVisionContextFrame | null>(null);
   const [sampleCount, setSampleCount] = useState(0);
 
   useEffect(() => {
@@ -447,6 +470,87 @@ export function AxisFullBodyTracker() {
     setPoseState(nextPoseState(status));
   }
 
+  async function captureCurrentFrameAsBase64(model: RoboflowModel) {
+    const video = videoRef.current;
+    const canvas = captureCanvasRef.current;
+    const frame = lastFrameRef.current;
+
+    if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      setRoboflowState("error");
+      return;
+    }
+
+    setRoboflowState(testingStateForModel(model));
+
+    try {
+      const maxWidth = 960;
+      const scale = Math.min(1, maxWidth / video.videoWidth);
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        setRoboflowState("error");
+        return;
+      }
+
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
+
+      const response = await fetch("/api/axis/vision/roboflow", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          image: {
+            type: "base64",
+            value: base64,
+          },
+          axisContext: {
+            sessionId: sessionIdRef.current,
+            cameraFacing,
+            bodyDetected: frameStatus.bodyDetected,
+            fullBodyVisible: frameStatus.fullBodyVisible,
+            poseConfidence: frameStatus.confidence,
+            stanceRead: frame?.reads.stanceRead,
+            balanceRead: frame?.reads.balanceRead,
+            kneeBendRead: frame?.reads.kneeBendRead,
+            torsoLeanRead: frame?.reads.torsoLeanRead,
+            frameStatus: frameStatus.message,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        setRoboflowState("error");
+        return;
+      }
+
+      const result = (await response.json()) as unknown;
+      setVisionContextFrame((previous) =>
+        mergeVisionContextFrame(previous, {
+          model,
+          result,
+          timestampMs: Date.now(),
+          cameraFacing,
+          bodyDetected: frameStatus.bodyDetected,
+          fullBodyVisible: frameStatus.fullBodyVisible,
+          poseConfidence: frameStatus.confidence,
+          stanceRead: frame?.reads.stanceRead,
+          balanceRead: frame?.reads.balanceRead,
+          kneeBendRead: frame?.reads.kneeBendRead,
+          torsoLeanRead: frame?.reads.torsoLeanRead,
+        }),
+      );
+      setRoboflowState("received");
+    } catch {
+      setRoboflowState("error");
+    }
+  }
+
   function resizeCanvasToVideo(video: HTMLVideoElement) {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -626,7 +730,13 @@ export function AxisFullBodyTracker() {
 
         <FullBodyFrameStatusPanel status={frameStatus} />
         <FullBodyReadPanel frame={latestFrame} status={frameStatus} />
-        <AIContextPanel context={aiContext} />
+        <AIContextPanel
+          context={aiContext}
+          onTestRoboflow={(model) => void captureCurrentFrameAsBase64(model)}
+          roboflowState={roboflowState}
+          hasVisionResult={Boolean(visionContextFrame)}
+        />
+        <canvas ref={captureCanvasRef} hidden />
 
         <section className="status-panel body-status-panel">
           <StatusLine label="Session" value={sessionStarted ? title : "Not started"} />
@@ -704,7 +814,17 @@ function FullBodyReadPanel({
   );
 }
 
-function AIContextPanel({ context }: { context: AxisFullBodyAIContext | null }) {
+function AIContextPanel({
+  context,
+  onTestRoboflow,
+  roboflowState,
+  hasVisionResult,
+}: {
+  context: AxisFullBodyAIContext | null;
+  onTestRoboflow: (model: RoboflowModel) => void;
+  roboflowState: RoboflowState;
+  hasVisionResult: boolean;
+}) {
   const fullBodyPercent = context?.summary.totalFrames
     ? Math.round((context.summary.fullBodyFrames / context.summary.totalFrames) * 100)
     : 0;
@@ -733,8 +853,74 @@ function AIContextPanel({ context }: { context: AxisFullBodyAIContext | null }) 
       <p className="frame-message">
         Axis is reading body context. AI can later summarize body patterns and suggest what to check next.
       </p>
+      <div className="button-row">
+        <button type="button" onClick={() => onTestRoboflow("sam2")}>
+          Test SAM2
+        </button>
+        <button type="button" onClick={() => onTestRoboflow("yolo_world")}>
+          Test YOLO
+        </button>
+        <button type="button" onClick={() => onTestRoboflow("qwen_vl")}>
+          Test Qwen
+        </button>
+      </div>
+      <p className="frame-message">{roboflowStatusLabel(roboflowState, hasVisionResult)}</p>
     </section>
   );
+}
+
+function roboflowStatusLabel(state: RoboflowState, hasVisionResult: boolean) {
+  if (state === "testing-sam2") return "Testing SAM2...";
+  if (state === "testing-yolo") return "Testing YOLO...";
+  if (state === "testing-qwen") return "Testing Qwen...";
+  if (state === "received") return hasVisionResult ? "Vision result ready" : "Last result received";
+  if (state === "error") return "Vision error";
+  return "Roboflow ready";
+}
+
+function testingStateForModel(model: RoboflowModel): RoboflowState {
+  if (model === "sam2") return "testing-sam2";
+  if (model === "yolo_world") return "testing-yolo";
+  return "testing-qwen";
+}
+
+function mergeVisionContextFrame(
+  previous: AxisVisionContextFrame | null,
+  next: {
+    model: RoboflowModel;
+    result: unknown;
+    timestampMs: number;
+    cameraFacing: CameraFacing;
+    bodyDetected: boolean;
+    fullBodyVisible: boolean;
+    poseConfidence?: number;
+    stanceRead?: string;
+    balanceRead?: string;
+    kneeBendRead?: string;
+    torsoLeanRead?: string;
+  },
+): AxisVisionContextFrame {
+  const roboflow = {
+    ...(previous?.roboflow || {}),
+    ...(next.model === "sam2" ? { sam2: next.result } : {}),
+    ...(next.model === "yolo_world" ? { yoloWorld: next.result } : {}),
+    ...(next.model === "qwen_vl" ? { qwenVl: next.result } : {}),
+  };
+
+  return {
+    timestampMs: next.timestampMs,
+    cameraFacing: next.cameraFacing,
+    bodyContext: {
+      bodyDetected: next.bodyDetected,
+      fullBodyVisible: next.fullBodyVisible,
+      poseConfidence: next.poseConfidence,
+      stanceRead: next.stanceRead,
+      balanceRead: next.balanceRead,
+      kneeBendRead: next.kneeBendRead,
+      torsoLeanRead: next.torsoLeanRead,
+    },
+    roboflow,
+  };
 }
 
 function ReadTile({ label, value }: { label: string; value: ReadValue }) {
