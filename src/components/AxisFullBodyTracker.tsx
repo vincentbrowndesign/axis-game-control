@@ -14,6 +14,32 @@ type CameraState = "idle" | "requesting" | "switching" | "ready" | "error" | "de
 type PoseState = "idle" | "loading" | "no-body" | "partial" | "full" | "low-confidence" | "error";
 type RoboflowModel = "sam2" | "yolo_world" | "qwen_vl";
 type RoboflowState = "idle" | "testing-sam2" | "testing-yolo" | "testing-qwen" | "error" | "received";
+type VisionErrorReason =
+  | "none"
+  | "key-missing"
+  | "workflow-missing"
+  | "frame-unavailable"
+  | "request-failed"
+  | "result-unavailable"
+  | "could-not-check";
+type VisionReadiness = {
+  apiKey: boolean;
+  workspace: boolean;
+  workflows: Record<RoboflowModel, boolean>;
+};
+type AxisFullBodyTruth = {
+  cameraActive: boolean;
+  sessionStarted: boolean;
+  poseDetected: boolean;
+  fullBodyVisible: boolean;
+  upperBodyVisible: boolean;
+  lowerBodyVisible: boolean;
+  feetVisible: boolean;
+  fullBodyPercent: number;
+  bodyContextReady: boolean;
+  visionReady: boolean;
+  message: string;
+};
 type AxisVisionContextFrame = {
   timestampMs: number;
   cameraFacing: CameraFacing;
@@ -221,14 +247,22 @@ export function AxisFullBodyTracker() {
   const [sessionStarted, setSessionStarted] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<CameraFacing>("rear");
   const [cameraState, setCameraState] = useState<CameraState>("idle");
-  const [poseState, setPoseState] = useState<PoseState>("idle");
+  const [, setPoseState] = useState<PoseState>("idle");
   const [frameStatus, setFrameStatus] = useState<FullBodyFrameStatus>(defaultStatus);
-  const [latestFrame, setLatestFrame] = useState<AxisFullBodyFrame | null>(null);
   const [aiContext, setAiContext] = useState<AxisFullBodyAIContext | null>(null);
   const [cameraMessage, setCameraMessage] = useState("Camera off");
   const [roboflowState, setRoboflowState] = useState<RoboflowState>("idle");
+  const [visionErrorReason, setVisionErrorReason] = useState<VisionErrorReason>("none");
+  const [visionReadiness, setVisionReadiness] = useState<VisionReadiness>({
+    apiKey: false,
+    workspace: false,
+    workflows: {
+      sam2: false,
+      yolo_world: false,
+      qwen_vl: false,
+    },
+  });
   const [visionContextFrame, setVisionContextFrame] = useState<AxisVisionContextFrame | null>(null);
-  const [sampleCount, setSampleCount] = useState(0);
 
   useEffect(() => {
     return () => {
@@ -242,24 +276,67 @@ export function AxisFullBodyTracker() {
     cameraFacingRef.current = cameraFacing;
   }, [cameraFacing]);
 
-  const cameraLabel = useMemo(() => {
-    if (cameraState === "ready") return cameraMessage;
-    if (cameraState === "switching") return "Switching camera...";
-    if (cameraState === "requesting") return "Opening camera";
-    if (cameraState === "denied") return "Camera permission needed";
-    if (cameraState === "error") return "Camera unavailable";
-    return "Camera off";
-  }, [cameraMessage, cameraState]);
+  useEffect(() => {
+    let cancelled = false;
 
-  const poseLabel = useMemo(() => {
-    if (poseState === "full") return "Full body read active";
-    if (poseState === "partial") return "Partial body read";
-    if (poseState === "loading") return "Reading body";
-    if (poseState === "low-confidence") return "Pose confidence low";
-    if (poseState === "no-body") return "Step fully into frame";
-    if (poseState === "error") return "Need more light";
-    return "Pose waiting";
-  }, [poseState]);
+    fetch("/api/axis/vision/roboflow")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Roboflow readiness failed");
+        return (await response.json()) as {
+          apiKey?: boolean;
+          workspace?: boolean;
+          workflows?: Partial<Record<RoboflowModel, boolean>>;
+        };
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setVisionReadiness({
+          apiKey: Boolean(result.apiKey),
+          workspace: Boolean(result.workspace),
+          workflows: {
+            sam2: Boolean(result.workflows?.sam2),
+            yolo_world: Boolean(result.workflows?.yolo_world),
+            qwen_vl: Boolean(result.workflows?.qwen_vl),
+          },
+        });
+        setVisionErrorReason(
+          !result.apiKey
+            ? "key-missing"
+            : !result.workspace || !Object.values(result.workflows || {}).some(Boolean)
+              ? "workflow-missing"
+              : "none",
+        );
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        logVisionDebug("readiness", error);
+        setVisionErrorReason("request-failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const fullBodyPercent = useMemo(() => {
+    return aiContext?.summary.totalFrames
+      ? Math.round((aiContext.summary.fullBodyFrames / aiContext.summary.totalFrames) * 100)
+      : 0;
+  }, [aiContext]);
+
+  const truth = useMemo(
+    () =>
+      buildFullBodyTruth({
+        cameraState,
+        sessionStarted,
+        frameStatus,
+        fullBodyPercent,
+        visionReadiness,
+      }),
+    [cameraState, frameStatus, fullBodyPercent, sessionStarted, visionReadiness],
+  );
+
+  const cameraLabel = cameraStatusLabel(cameraState, cameraMessage);
 
   async function startCamera(nextFacing = cameraFacing) {
     await openCamera(nextFacing, cameraState === "ready" || cameraState === "switching");
@@ -464,9 +541,7 @@ export function AxisFullBodyTracker() {
     saveFullBodyContext(title, nextContext);
 
     setFrameStatus(status);
-    setLatestFrame(frame);
     setAiContext(nextContext);
-    setSampleCount(timelineRef.current.length);
     setPoseState(nextPoseState(status));
   }
 
@@ -475,12 +550,20 @@ export function AxisFullBodyTracker() {
     const canvas = captureCanvasRef.current;
     const frame = lastFrameRef.current;
 
+    if (!canCheckVision(model, truth, visionReadiness)) {
+      setRoboflowState("error");
+      setVisionErrorReason(visionBlockReason(model, truth, visionReadiness));
+      return;
+    }
+
     if (!video || !canvas || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
       setRoboflowState("error");
+      setVisionErrorReason("frame-unavailable");
       return;
     }
 
     setRoboflowState(testingStateForModel(model));
+    setVisionErrorReason("none");
 
     try {
       const maxWidth = 960;
@@ -491,6 +574,7 @@ export function AxisFullBodyTracker() {
       const context = canvas.getContext("2d");
       if (!context) {
         setRoboflowState("error");
+        setVisionErrorReason("frame-unavailable");
         return;
       }
 
@@ -525,11 +609,20 @@ export function AxisFullBodyTracker() {
       });
 
       if (!response.ok) {
+        const errorResult = (await response.json().catch(() => null)) as { error?: string } | null;
+        setVisionErrorReason(visionErrorFromCode(errorResult?.error));
+        logVisionDebug("request", errorResult);
         setRoboflowState("error");
         return;
       }
 
       const result = (await response.json()) as unknown;
+      if (!result) {
+        setVisionErrorReason("result-unavailable");
+        setRoboflowState("error");
+        return;
+      }
+
       setVisionContextFrame((previous) =>
         mergeVisionContextFrame(previous, {
           model,
@@ -546,8 +639,11 @@ export function AxisFullBodyTracker() {
         }),
       );
       setRoboflowState("received");
+      setVisionErrorReason("none");
     } catch {
+      logVisionDebug("network", { model });
       setRoboflowState("error");
+      setVisionErrorReason("request-failed");
     }
   }
 
@@ -700,15 +796,15 @@ export function AxisFullBodyTracker() {
         </section>
 
         <section className="body-stage-card">
-          <div className="camera-topline">
-            <div>
-              <p>{cameraLabel}</p>
-              <strong>{poseLabel}</strong>
+            <div className="camera-topline">
+              <div>
+                <p>{cameraLabel}</p>
+                <strong>{headerStatusLabel(truth)}</strong>
+              </div>
+              <span className={truth.fullBodyVisible ? "body-pill active" : "body-pill"}>
+                {truth.fullBodyVisible ? "Full body detected" : truth.message}
+              </span>
             </div>
-            <span className={frameStatus.fullBodyVisible ? "body-pill active" : "body-pill"}>
-              {frameStatus.fullBodyVisible ? "Full body detected" : frameStatus.message}
-            </span>
-          </div>
 
           <div className="body-video-wrap">
             <video
@@ -728,87 +824,38 @@ export function AxisFullBodyTracker() {
           </div>
         </section>
 
-        <FullBodyFrameStatusPanel status={frameStatus} />
-        <FullBodyReadPanel frame={latestFrame} status={frameStatus} />
+        <BodyReadPanel truth={truth} />
         <AIContextPanel
           context={aiContext}
+          truth={truth}
+        />
+        <VisionSupportPanel
           onTestRoboflow={(model) => void captureCurrentFrameAsBase64(model)}
+          truth={truth}
+          visionReadiness={visionReadiness}
           roboflowState={roboflowState}
           hasVisionResult={Boolean(visionContextFrame)}
+          visionErrorReason={visionErrorReason}
         />
         <canvas ref={captureCanvasRef} hidden />
-
-        <section className="status-panel body-status-panel">
-          <StatusLine label="Session" value={sessionStarted ? title : "Not started"} />
-          <StatusLine label="Camera" value={cameraFacing === "front" ? "Front" : "Rear"} />
-          <StatusLine label="Pose" value={frameStatus.bodyDetected ? "Pose overlay active" : "Waiting"} />
-          <StatusLine label="Full body" value={frameStatus.fullBodyVisible ? "Active" : "Not active"} />
-          <StatusLine label="Confidence" value={`${Math.round(frameStatus.confidence * 100)}%`} />
-          <StatusLine label="Body context" value={sampleCount ? "Saving locally" : "Waiting"} />
-        </section>
       </section>
     </main>
   );
 }
 
-function FullBodyFrameStatusPanel({ status }: { status: FullBodyFrameStatus }) {
+function BodyReadPanel({ truth }: { truth: AxisFullBodyTruth }) {
   return (
     <section className="body-card">
       <div className="section-title">
         <span>2</span>
-        <h2>Full Body Frame</h2>
+        <h2>Body Read</h2>
       </div>
       <div className="body-read-grid">
-        <ReadTile label="Frame" value={status.fullBodyVisible ? "full body" : status.bodyDetected ? "partial body" : "no body"} />
-        <ReadTile label="Upper Body" value={status.upperBodyVisible ? "stable" : "unstable"} />
-        <ReadTile label="Lower Body" value={status.lowerBodyVisible ? "stable" : "unstable"} />
-        <ReadTile label="Feet" value={status.feetVisible ? "stable" : "unstable"} />
-      </div>
-      <p className="frame-message">{status.message}</p>
-    </section>
-  );
-}
-
-function FullBodyReadPanel({
-  frame,
-  status,
-}: {
-  frame: AxisFullBodyFrame | null;
-  status: FullBodyFrameStatus;
-}) {
-  if (!status.fullBodyVisible || !frame) {
-    return (
-      <section className="body-card">
-        <div className="section-title">
-          <span>3</span>
-          <h2>Full Body Reads</h2>
-        </div>
-        <div className="body-read-grid">
-          <ReadTile label="Frame" value={status.bodyDetected ? "partial body" : "no body"} />
-        </div>
-        <p className="frame-message">
-          {status.bodyDetected ? "Partial body read. Move back for full body." : "Step fully into frame."}
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section className="body-card">
-      <div className="section-title">
-        <span>3</span>
-        <h2>Full Body Reads</h2>
-      </div>
-      <div className="body-read-grid">
-        <ReadTile label="Frame" value="full body" />
-        <ReadTile label="Stance" value={(frame.reads.stanceRead as ReadValue) || "normal"} />
-        <ReadTile label="Balance" value={(frame.reads.balanceRead as ReadValue) || "balanced"} />
-        <ReadTile label="Knee Bend" value={(frame.reads.kneeBendRead as ReadValue) || "medium"} />
-        <ReadTile label="Hip Level" value={(frame.reads.hipLevelRead as ReadValue) || "level"} />
-        <ReadTile label="Shoulder Level" value={(frame.reads.shoulderLevelRead as ReadValue) || "level"} />
-        <ReadTile label="Torso Lean" value={(frame.reads.torsoLeanRead as ReadValue) || "upright"} />
-        <ReadTile label="Base" value={frame.base.baseStable ? "stable" : "unstable"} />
-        <ReadTile label="Movement Quality" value={(frame.reads.movementQualityRead as ReadValue) || "stable"} />
+        <ReadTile label="Frame" value={truth.fullBodyVisible ? "full body" : truth.poseDetected ? "partial body" : "no body"} />
+        <ReadTile label="Upper Body" value={truth.upperBodyVisible ? "stable" : "unstable"} />
+        <ReadTile label="Lower Body" value={truth.lowerBodyVisible ? "stable" : "unstable"} />
+        <ReadTile label="Feet" value={truth.feetVisible ? "stable" : "unstable"} />
+        <StatusLine label="Next Move" value={truth.message} />
       </div>
     </section>
   );
@@ -816,66 +863,88 @@ function FullBodyReadPanel({
 
 function AIContextPanel({
   context,
-  onTestRoboflow,
-  roboflowState,
-  hasVisionResult,
+  truth,
 }: {
   context: AxisFullBodyAIContext | null;
-  onTestRoboflow: (model: RoboflowModel) => void;
-  roboflowState: RoboflowState;
-  hasVisionResult: boolean;
+  truth: AxisFullBodyTruth;
 }) {
-  const fullBodyPercent = context?.summary.totalFrames
-    ? Math.round((context.summary.fullBodyFrames / context.summary.totalFrames) * 100)
-    : 0;
-
   return (
     <section className="body-card">
       <div className="section-title">
-        <span>4</span>
+        <span>3</span>
         <h2>AI Body Context</h2>
       </div>
       <div className="body-read-grid">
-        <StatusLine
-          label="Context"
-          value={context?.summary.totalFrames ? "Body context ready" : "Waiting"}
-        />
-        <StatusLine label="Full Body" value={`${fullBodyPercent}%`} />
-        <StatusLine
-          label="Check Next"
-          value={context?.summary.mostCommonFrameIssue || "Step fully into frame"}
-        />
-        <StatusLine
-          label="AI Use"
-          value={context ? "Review session later" : "Needs body frames"}
-        />
+        <StatusLine label="Context" value={aiContextLabel(truth)} />
+        <StatusLine label="Full Body" value={`${truth.fullBodyPercent}%`} />
+        <StatusLine label="Check Next" value={truth.message} />
+        <StatusLine label="AI Use" value={aiUseLabel(truth)} />
       </div>
       <p className="frame-message">
-        Axis is reading body context. AI can later summarize body patterns and suggest what to check next.
+        {truth.sessionStarted
+          ? context
+            ? "Body context is building from the live pose read."
+            : "Body context building"
+          : "Start session to save body context."}
       </p>
-      <div className="button-row">
-        <button type="button" onClick={() => onTestRoboflow("sam2")}>
-          Test SAM2
-        </button>
-        <button type="button" onClick={() => onTestRoboflow("yolo_world")}>
-          Test YOLO
-        </button>
-        <button type="button" onClick={() => onTestRoboflow("qwen_vl")}>
-          Test Qwen
-        </button>
-      </div>
-      <p className="frame-message">{roboflowStatusLabel(roboflowState, hasVisionResult)}</p>
     </section>
   );
 }
 
-function roboflowStatusLabel(state: RoboflowState, hasVisionResult: boolean) {
-  if (state === "testing-sam2") return "Testing SAM2...";
-  if (state === "testing-yolo") return "Testing YOLO...";
-  if (state === "testing-qwen") return "Testing Qwen...";
-  if (state === "received") return hasVisionResult ? "Vision result ready" : "Last result received";
-  if (state === "error") return "Vision error";
-  return "Roboflow ready";
+function VisionSupportPanel({
+  onTestRoboflow,
+  truth,
+  visionReadiness,
+  roboflowState,
+  hasVisionResult,
+  visionErrorReason,
+}: {
+  onTestRoboflow: (model: RoboflowModel) => void;
+  truth: AxisFullBodyTruth;
+  visionReadiness: VisionReadiness;
+  roboflowState: RoboflowState;
+  hasVisionResult: boolean;
+  visionErrorReason: VisionErrorReason;
+}) {
+  return (
+    <section className="body-card">
+      <div className="section-title">
+        <span>4</span>
+        <h2>Vision Support</h2>
+      </div>
+      <div className="body-read-grid">
+        <StatusLine label="Status" value={roboflowStatusLabel(roboflowState, hasVisionResult, visionErrorReason)} />
+        <StatusLine label="SAM2" value={visionReadiness.workflows.sam2 ? "Ready" : "Missing"} />
+        <StatusLine label="YOLO" value={visionReadiness.workflows.yolo_world ? "Ready" : "Missing"} />
+        <StatusLine label="Qwen" value={visionReadiness.workflows.qwen_vl ? "Ready" : "Missing"} />
+      </div>
+      <div className="button-row">
+        <button type="button" disabled={!canCheckVision("sam2", truth, visionReadiness)} onClick={() => onTestRoboflow("sam2")}>
+          Check SAM2
+        </button>
+        <button type="button" disabled={!canCheckVision("yolo_world", truth, visionReadiness)} onClick={() => onTestRoboflow("yolo_world")}>
+          Check YOLO
+        </button>
+        <button type="button" disabled={!canCheckVision("qwen_vl", truth, visionReadiness)} onClick={() => onTestRoboflow("qwen_vl")}>
+          Ask Qwen
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function roboflowStatusLabel(
+  state: RoboflowState,
+  hasVisionResult: boolean,
+  errorReason: VisionErrorReason,
+) {
+  if (state === "testing-sam2" || state === "testing-yolo" || state === "testing-qwen") {
+    return "Checking frame...";
+  }
+  if (state === "received") return hasVisionResult ? "Vision checked" : "Vision result unavailable";
+  if (state === "error") return visionErrorLabel(errorReason);
+  if (errorReason !== "none") return visionErrorLabel(errorReason);
+  return "Vision ready";
 }
 
 function testingStateForModel(model: RoboflowModel): RoboflowState {
@@ -921,6 +990,164 @@ function mergeVisionContextFrame(
     },
     roboflow,
   };
+}
+
+function buildFullBodyTruth({
+  cameraState,
+  sessionStarted,
+  frameStatus,
+  fullBodyPercent,
+  visionReadiness,
+}: {
+  cameraState: CameraState;
+  sessionStarted: boolean;
+  frameStatus: FullBodyFrameStatus;
+  fullBodyPercent: number;
+  visionReadiness: VisionReadiness;
+}): AxisFullBodyTruth {
+  const cameraActive = cameraState === "ready";
+  const poseDetected = cameraActive && frameStatus.bodyDetected;
+  const fullBodyVisible = poseDetected && frameStatus.fullBodyVisible;
+  const bodyContextReady = fullBodyVisible && fullBodyPercent > 0 && sessionStarted;
+  const visionReady =
+    cameraActive &&
+    poseDetected &&
+    visionReadiness.apiKey &&
+    visionReadiness.workspace &&
+    Object.values(visionReadiness.workflows).some(Boolean);
+
+  return {
+    cameraActive,
+    sessionStarted,
+    poseDetected,
+    fullBodyVisible,
+    upperBodyVisible: poseDetected && frameStatus.upperBodyVisible,
+    lowerBodyVisible: poseDetected && frameStatus.lowerBodyVisible,
+    feetVisible: poseDetected && frameStatus.feetVisible,
+    fullBodyPercent,
+    bodyContextReady,
+    visionReady,
+    message: bodyTruthMessage({
+      cameraActive,
+      poseDetected,
+      fullBodyVisible,
+      upperBodyVisible: frameStatus.upperBodyVisible,
+      lowerBodyVisible: frameStatus.lowerBodyVisible,
+      feetVisible: frameStatus.feetVisible,
+      fullBodyPercent,
+      frameMessage: frameStatus.message,
+    }),
+  };
+}
+
+function bodyTruthMessage({
+  cameraActive,
+  poseDetected,
+  fullBodyVisible,
+  upperBodyVisible,
+  lowerBodyVisible,
+  feetVisible,
+  fullBodyPercent,
+  frameMessage,
+}: {
+  cameraActive: boolean;
+  poseDetected: boolean;
+  fullBodyVisible: boolean;
+  upperBodyVisible: boolean;
+  lowerBodyVisible: boolean;
+  feetVisible: boolean;
+  fullBodyPercent: number;
+  frameMessage: string;
+}) {
+  if (!cameraActive) return "Turn on camera";
+  if (!poseDetected) return "Step fully into frame";
+  if (fullBodyVisible && fullBodyPercent > 0) return "Full body read active";
+  if (fullBodyVisible) return "Body context building";
+  if (feetVisible && !upperBodyVisible) return "Hold camera steady";
+  if (upperBodyVisible && !lowerBodyVisible) return "Move back for full body";
+  return frameMessage || "Move back for full body";
+}
+
+function cameraStatusLabel(cameraState: CameraState, cameraMessage: string) {
+  if (cameraState === "ready") return cameraMessage;
+  if (cameraState === "switching") return "Switching camera...";
+  if (cameraState === "requesting") return "Opening camera";
+  if (cameraState === "denied") return "Camera permission needed";
+  if (cameraState === "error") return "Camera unavailable";
+  return "Camera off";
+}
+
+function headerStatusLabel(truth: AxisFullBodyTruth) {
+  if (!truth.cameraActive) return "Camera off";
+  if (!truth.poseDetected) return "Camera active";
+  if (truth.fullBodyVisible && truth.fullBodyPercent > 0) return "Full body read active";
+  if (truth.fullBodyVisible) return "Full body detected";
+  return "Partial body read";
+}
+
+function aiContextLabel(truth: AxisFullBodyTruth) {
+  if (!truth.sessionStarted) return "Building";
+  if (truth.fullBodyPercent > 80) return "Ready";
+  if (truth.fullBodyPercent > 50) return "Usable";
+  return "Building";
+}
+
+function aiUseLabel(truth: AxisFullBodyTruth) {
+  if (!truth.sessionStarted) return "Not ready yet";
+  if (truth.fullBodyPercent > 80) return "Session summary ready";
+  if (truth.fullBodyPercent > 50) return "Review body pattern";
+  return "Not ready yet";
+}
+
+function canCheckVision(
+  model: RoboflowModel,
+  truth: AxisFullBodyTruth,
+  visionReadiness: VisionReadiness,
+) {
+  return (
+    truth.cameraActive &&
+    truth.poseDetected &&
+    visionReadiness.apiKey &&
+    visionReadiness.workspace &&
+    visionReadiness.workflows[model]
+  );
+}
+
+function visionBlockReason(
+  model: RoboflowModel,
+  truth: AxisFullBodyTruth,
+  visionReadiness: VisionReadiness,
+): VisionErrorReason {
+  if (!truth.cameraActive || !truth.poseDetected) return "frame-unavailable";
+  if (!visionReadiness.apiKey) return "key-missing";
+  if (!visionReadiness.workspace || !visionReadiness.workflows[model]) return "workflow-missing";
+  return "could-not-check";
+}
+
+function visionErrorFromCode(error?: string): VisionErrorReason {
+  if (error === "ROBOFLOW_API_KEY_MISSING") return "key-missing";
+  if (error === "ROBOFLOW_WORKSPACE_MISSING" || error === "ROBOFLOW_WORKFLOW_ID_MISSING") {
+    return "workflow-missing";
+  }
+  if (error === "ROBOFLOW_IMAGE_MISSING") return "frame-unavailable";
+  if (error === "ROBOFLOW_NETWORK_ERROR") return "request-failed";
+  if (error === "ROBOFLOW_ERROR") return "request-failed";
+  return "could-not-check";
+}
+
+function visionErrorLabel(reason: VisionErrorReason) {
+  if (reason === "key-missing") return "Roboflow key missing";
+  if (reason === "workflow-missing") return "Workflow ID missing";
+  if (reason === "frame-unavailable") return "Camera frame unavailable";
+  if (reason === "request-failed") return "Roboflow request failed";
+  if (reason === "result-unavailable") return "Vision result unavailable";
+  if (reason === "could-not-check") return "Could not check frame";
+  return "Vision unavailable";
+}
+
+function logVisionDebug(label: string, detail: unknown) {
+  if (process.env.NODE_ENV !== "development") return;
+  console.debug(`[Axis vision] ${label}`, detail);
 }
 
 function ReadTile({ label, value }: { label: string; value: ReadValue }) {

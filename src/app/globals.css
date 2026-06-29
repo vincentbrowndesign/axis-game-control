@@ -193,6 +193,12 @@ button {
   color: #0b1220;
 }
 
+.camera-choice button:disabled,
+.button-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
 .body-video-wrap {
   aspect-ratio: 9 / 14;
   background: #030712;

@@ -58,6 +58,23 @@ const aiPurposeByModel: Record<RoboflowModel, string> = {
   qwen_vl: "Short visual reasoning about frame quality and body visibility.",
 };
 
+export async function GET() {
+  const apiKey = Boolean(process.env.ROBOFLOW_API_KEY);
+  const workspace = Boolean(process.env.ROBOFLOW_WORKSPACE);
+  const workflows = {
+    sam2: Boolean(workflowMap.sam2),
+    yolo_world: Boolean(workflowMap.yolo_world),
+    qwen_vl: Boolean(workflowMap.qwen_vl),
+  };
+
+  return NextResponse.json({
+    ok: apiKey && workspace && Object.values(workflows).some(Boolean),
+    apiKey,
+    workspace,
+    workflows,
+  });
+}
+
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as RoboflowVisionRequest | null;
   const model = body?.model;
