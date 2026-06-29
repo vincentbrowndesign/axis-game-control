@@ -1,5 +1,5 @@
-import { AxisMeasureShell } from "@/components/AxisMeasureShell";
+import { BasketballCameraOverlay } from "@/components/BasketballCameraOverlay";
 
 export default function Home() {
-  return <AxisMeasureShell />;
+  return <BasketballCameraOverlay />;
 }
