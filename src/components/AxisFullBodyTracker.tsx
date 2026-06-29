@@ -7,10 +7,10 @@ import {
   type NormalizedLandmark,
   type PoseLandmarkerResult,
 } from "@mediapipe/tasks-vision";
+import { type AxisFullBodyAIContext } from "@/lib/basketball";
 
 type CameraFacing = "front" | "rear";
-type MediaFacing = "user" | "environment";
-type CameraState = "idle" | "requesting" | "ready" | "error" | "denied";
+type CameraState = "idle" | "requesting" | "switching" | "ready" | "error" | "denied";
 type PoseState = "idle" | "loading" | "no-body" | "partial" | "full" | "low-confidence" | "error";
 type ReadValue =
   | "full body"
@@ -203,6 +203,8 @@ export function AxisFullBodyTracker() {
   const [poseState, setPoseState] = useState<PoseState>("idle");
   const [frameStatus, setFrameStatus] = useState<FullBodyFrameStatus>(defaultStatus);
   const [latestFrame, setLatestFrame] = useState<AxisFullBodyFrame | null>(null);
+  const [aiContext, setAiContext] = useState<AxisFullBodyAIContext | null>(null);
+  const [cameraMessage, setCameraMessage] = useState("Camera off");
   const [sampleCount, setSampleCount] = useState(0);
 
   useEffect(() => {
@@ -217,14 +219,14 @@ export function AxisFullBodyTracker() {
     cameraFacingRef.current = cameraFacing;
   }, [cameraFacing]);
 
-  const mediaFacing: MediaFacing = cameraFacing === "front" ? "user" : "environment";
   const cameraLabel = useMemo(() => {
-    if (cameraState === "ready") return "Camera ready";
+    if (cameraState === "ready") return cameraMessage;
+    if (cameraState === "switching") return "Switching camera...";
     if (cameraState === "requesting") return "Opening camera";
     if (cameraState === "denied") return "Camera permission needed";
     if (cameraState === "error") return "Camera unavailable";
     return "Camera off";
-  }, [cameraState]);
+  }, [cameraMessage, cameraState]);
 
   const poseLabel = useMemo(() => {
     if (poseState === "full") return "Full body read active";
@@ -236,28 +238,25 @@ export function AxisFullBodyTracker() {
     return "Pose waiting";
   }, [poseState]);
 
-  async function startCamera() {
-    setCameraState("requesting");
+  async function startCamera(nextFacing = cameraFacing) {
+    await openCamera(nextFacing, cameraState === "ready" || cameraState === "switching");
+  }
+
+  async function switchCamera(nextFacing: CameraFacing) {
+    setCameraFacing(nextFacing);
+    cameraFacingRef.current = nextFacing;
+    await openCamera(nextFacing, cameraState === "ready" || cameraState === "requesting" || cameraState === "switching");
+  }
+
+  async function openCamera(nextFacing: CameraFacing, isSwitching: boolean) {
+    setCameraState(isSwitching ? "switching" : "requesting");
     setPoseState("loading");
     setFrameStatus({ ...defaultStatus, message: "Reading body" });
+    stopCurrentStream();
 
     try {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: mediaFacing },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-      });
-
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
+      const cameraResult = await requestCameraStream(nextFacing);
+      await attachStream(cameraResult.stream);
 
       if (!landmarkerRef.current) {
         const vision = await FilesetResolver.forVisionTasks(wasmPath);
@@ -272,17 +271,124 @@ export function AxisFullBodyTracker() {
       }
 
       setCameraState("ready");
+      setCameraFacing(nextFacing);
+      cameraFacingRef.current = nextFacing;
+      setCameraMessage(
+        cameraResult.message || `${nextFacing === "front" ? "Front" : "Rear"} camera active`,
+      );
       setPoseState("no-body");
+      lastVideoTimeRef.current = -1;
       detectPoseLoop();
     } catch (error) {
       const name = error instanceof DOMException ? error.name : "";
       setCameraState(name === "NotAllowedError" ? "denied" : "error");
       setPoseState("error");
+      setCameraMessage(name === "NotAllowedError" ? "Camera permission needed" : "Camera unavailable");
       setFrameStatus({
         ...defaultStatus,
         message: name === "NotAllowedError" ? "Allow camera access" : "Need more light",
       });
     }
+  }
+
+  function stopCurrentStream() {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    lastVideoTimeRef.current = -1;
+    clearCanvas();
+
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+  }
+
+  async function requestCameraStream(nextFacing: CameraFacing): Promise<{
+    stream: MediaStream;
+    message?: string;
+  }> {
+    const facingMode = nextFacing === "front" ? "user" : ({ ideal: "environment" } as const);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      return { stream };
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "NotAllowedError") {
+        throw error;
+      }
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter((device) => device.kind === "videoinput");
+
+      if (!cameras.length) {
+        throw error;
+      }
+
+      if (cameras.length === 1) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            deviceId: { exact: cameras[0].deviceId },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        });
+
+        return { stream, message: "Only one camera found" };
+      }
+
+      const selectedCamera =
+        cameras.find((device) => {
+          const label = device.label.toLowerCase();
+          return nextFacing === "front"
+            ? label.includes("front") || label.includes("user")
+            : label.includes("back") || label.includes("rear") || label.includes("environment");
+        }) || cameras[0];
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          deviceId: { exact: selectedCamera.deviceId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      return { stream };
+    }
+  }
+
+  async function attachStream(stream: MediaStream) {
+    streamRef.current = stream;
+
+    if (!videoRef.current) return;
+
+    const video = videoRef.current;
+    video.srcObject = stream;
+
+    await new Promise<void>((resolve) => {
+      if (video.readyState >= 1) {
+        resolve();
+        return;
+      }
+
+      video.onloadedmetadata = () => resolve();
+    });
+
+    await video.play();
   }
 
   function detectPoseLoop() {
@@ -326,10 +432,17 @@ export function AxisFullBodyTracker() {
 
     lastFrameRef.current = frame;
     timelineRef.current = [...timelineRef.current.slice(-119), frame];
-    saveFullBodyContext(title, timelineRef.current);
+    const nextContext = buildAIContext(
+      sessionIdRef.current,
+      cameraFacingRef.current,
+      timelineRef.current,
+      streamRef.current?.getVideoTracks()[0]?.getSettings().frameRate,
+    );
+    saveFullBodyContext(title, nextContext);
 
     setFrameStatus(status);
     setLatestFrame(frame);
+    setAiContext(nextContext);
     setSampleCount(timelineRef.current.length);
     setPoseState(nextPoseState(status));
   }
@@ -449,14 +562,14 @@ export function AxisFullBodyTracker() {
             <button
               className={cameraFacing === "front" ? "selected" : ""}
               type="button"
-              onClick={() => setCameraFacing("front")}
+              onClick={() => void switchCamera("front")}
             >
               Front
             </button>
             <button
               className={cameraFacing === "rear" ? "selected" : ""}
               type="button"
-              onClick={() => setCameraFacing("rear")}
+              onClick={() => void switchCamera("rear")}
             >
               Rear
             </button>
@@ -470,8 +583,14 @@ export function AxisFullBodyTracker() {
             >
               {sessionStarted ? "Session Active" : "Start Session"}
             </button>
-            <button type="button" onClick={startCamera}>
+            <button type="button" onClick={() => void startCamera()}>
               Turn On Camera
+            </button>
+            <button
+              type="button"
+              onClick={() => void switchCamera(cameraFacing === "front" ? "rear" : "front")}
+            >
+              Switch Camera
             </button>
           </div>
         </section>
@@ -507,6 +626,7 @@ export function AxisFullBodyTracker() {
 
         <FullBodyFrameStatusPanel status={frameStatus} />
         <FullBodyReadPanel frame={latestFrame} status={frameStatus} />
+        <AIContextPanel context={aiContext} />
 
         <section className="status-panel body-status-panel">
           <StatusLine label="Session" value={sessionStarted ? title : "Not started"} />
@@ -580,6 +700,39 @@ function FullBodyReadPanel({
         <ReadTile label="Base" value={frame.base.baseStable ? "stable" : "unstable"} />
         <ReadTile label="Movement Quality" value={(frame.reads.movementQualityRead as ReadValue) || "stable"} />
       </div>
+    </section>
+  );
+}
+
+function AIContextPanel({ context }: { context: AxisFullBodyAIContext | null }) {
+  const fullBodyPercent = context?.summary.totalFrames
+    ? Math.round((context.summary.fullBodyFrames / context.summary.totalFrames) * 100)
+    : 0;
+
+  return (
+    <section className="body-card">
+      <div className="section-title">
+        <span>4</span>
+        <h2>AI Body Context</h2>
+      </div>
+      <div className="body-read-grid">
+        <StatusLine
+          label="Context"
+          value={context?.summary.totalFrames ? "Body context ready" : "Waiting"}
+        />
+        <StatusLine label="Full Body" value={`${fullBodyPercent}%`} />
+        <StatusLine
+          label="Check Next"
+          value={context?.summary.mostCommonFrameIssue || "Step fully into frame"}
+        />
+        <StatusLine
+          label="AI Use"
+          value={context ? "Review session later" : "Needs body frames"}
+        />
+      </div>
+      <p className="frame-message">
+        Axis is reading body context. AI can later summarize body patterns and suggest what to check next.
+      </p>
     </section>
   );
 }
@@ -798,14 +951,67 @@ function buildFullBodyFrame(
   };
 }
 
-function saveFullBodyContext(title: string, frames: AxisFullBodyFrame[]) {
+function buildAIContext(
+  sessionId: string,
+  cameraFacing: CameraFacing,
+  frames: AxisFullBodyFrame[],
+  frameRate?: number,
+): AxisFullBodyAIContext {
+  const totalFrames = frames.length;
+  const fullBodyFrames = frames.filter((frame) => frame.reads.frameRead === "full_body").length;
+  const partialBodyFrames = frames.filter((frame) => frame.reads.frameRead === "partial_body").length;
+  const noBodyFrames = frames.filter((frame) => frame.reads.frameRead === "no_body").length;
+  const averageConfidence = totalFrames
+    ? average(frames.map((frame) => frame.frameStatus.confidence))
+    : 0;
+  const issueCounts = new Map<string, number>();
+
+  frames.forEach((frame) => {
+    frame.reads.notes.forEach((note) => {
+      issueCounts.set(note, (issueCounts.get(note) || 0) + 1);
+    });
+  });
+
+  const mostCommonFrameIssue = [...issueCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+
+  return {
+    sessionId,
+    cameraFacing,
+    frameRate,
+    frames,
+    summary: {
+      totalFrames,
+      fullBodyFrames,
+      partialBodyFrames,
+      noBodyFrames,
+      averageConfidence,
+      mostCommonFrameIssue,
+    },
+    bodyReadTimeline: frames.map((frame) => ({
+      timestampMs: frame.timestampMs,
+      frameRead: frame.reads.frameRead,
+      stanceRead: frame.reads.stanceRead,
+      balanceRead: frame.reads.balanceRead,
+      kneeBendRead: frame.reads.kneeBendRead,
+      hipLevelRead: frame.reads.hipLevelRead,
+      shoulderLevelRead: frame.reads.shoulderLevelRead,
+      torsoLeanRead: frame.reads.torsoLeanRead,
+      movementQualityRead: frame.reads.movementQualityRead,
+      notes: frame.reads.notes,
+    })),
+  };
+}
+
+function saveFullBodyContext(title: string, context: AxisFullBodyAIContext) {
   try {
     window.localStorage.setItem(
       "axis-basketball-full-body-context",
       JSON.stringify({
         title,
         updatedAt: new Date().toISOString(),
-        frames: frames.slice(-120),
+        ...context,
+        frames: context.frames.slice(-120),
+        bodyReadTimeline: context.bodyReadTimeline.slice(-120),
       }),
     );
   } catch {

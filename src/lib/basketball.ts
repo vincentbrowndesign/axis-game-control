@@ -99,6 +99,33 @@ export type AxisFullBodyFrame = {
   };
 };
 
+export type AxisFullBodyAIContext = {
+  sessionId: string;
+  cameraFacing: CameraFacing;
+  frameRate?: number;
+  frames: AxisFullBodyFrame[];
+  summary: {
+    totalFrames: number;
+    fullBodyFrames: number;
+    partialBodyFrames: number;
+    noBodyFrames: number;
+    averageConfidence: number;
+    mostCommonFrameIssue?: string;
+  };
+  bodyReadTimeline: Array<{
+    timestampMs: number;
+    frameRead: "no_body" | "partial_body" | "full_body";
+    stanceRead?: string;
+    balanceRead?: string;
+    kneeBendRead?: string;
+    hipLevelRead?: string;
+    shoulderLevelRead?: string;
+    torsoLeanRead?: string;
+    movementQualityRead?: string;
+    notes: string[];
+  }>;
+};
+
 export type BasketballSession = {
   id: string;
   userId: string;

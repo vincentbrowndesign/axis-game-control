@@ -24,6 +24,7 @@ turn Axis on
 -> Axis checks full body visibility
 -> Axis tracks full-body pose landmarks
 -> Axis reads body structure, base, balance, and movement
+-> Axis builds body context for AI
 -> Axis creates full-body context for AI later
 ```
 
@@ -128,6 +129,26 @@ Early data should be full-body context:
 - joint angles
 - movement deltas
 - read notes
+
+Create `AxisFullBodyAIContext` from calculated frames:
+
+- frames
+- summary counts
+- average confidence
+- most common frame issue
+- body read timeline
+
+Allowed AI language:
+
+- Axis is reading body context.
+- Axis is summarizing body patterns.
+- Axis is suggesting what to check next.
+
+Forbidden AI language:
+
+- Axis knows your form is wrong.
+- Axis fully analyzed your jumper.
+- Axis detected elite mechanics.
 
 ## 6. UI Rules
 

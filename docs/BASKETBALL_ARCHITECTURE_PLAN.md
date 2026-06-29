@@ -27,6 +27,7 @@ Use this sequence:
 - Gate reads until lower body and feet are visible
 - Track full-body frames over time
 - Generate simple full-body reads
+- Build an AI body context object from the frame timeline
 - Save full-body context locally first
 - Add persistent full-body timeline storage later
 - Add AI full-body read analysis later
@@ -63,11 +64,35 @@ These routes should wait until full-body pose tracking and full-body context are
 - JointAngles
 - Movement
 - FullBodyReads
+- AxisFullBodyAIContext
 - BodyReadCandidate
 - ReviewedBodyRead
 - CoachNote
 
-## 6. MVP Rule
+## 6. AI Body Context
+
+AI should receive calculated context, not guess from a raw frame first:
+
+- video frame later
+- full-body pose landmarks
+- full-body frame status
+- body reads
+- movement changes over time
+
+The internal context object is `AxisFullBodyAIContext`:
+
+- session id
+- camera facing
+- optional frame rate
+- full-body frames
+- summary counts
+- average confidence
+- most common frame issue
+- body read timeline
+
+AI may later summarize frame quality, body patterns, movement changes, and simple coaching cues. It must not claim medical biomechanics, perfect form judgment, player identity, court spacing, or automatic skill detection.
+
+## 7. MVP Rule
 
 First version only needs:
 
