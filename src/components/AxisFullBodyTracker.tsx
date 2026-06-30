@@ -19,6 +19,10 @@ type HfError =
   | "token-missing"
   | "frame-unavailable"
   | "frame-too-large"
+  | "token-unauthorized"
+  | "model-not-found"
+  | "input-mismatch"
+  | "model-loading"
   | "request-failed"
   | "result-unavailable"
   | "could-not-check";
@@ -275,18 +279,20 @@ export function AxisFullBodyTracker() {
         if (!response.ok) throw new Error("HF health check failed");
         return (await response.json()) as {
           ok?: boolean;
+          hfTokenPresent?: boolean;
           env?: { hfTokenPresent?: boolean };
         };
       })
       .then((result) => {
         if (cancelled) return;
-        const tokenPresent = Boolean(result.env?.hfTokenPresent);
+        const tokenPresent = Boolean(result.hfTokenPresent ?? result.env?.hfTokenPresent);
         setHfTokenPresent(tokenPresent);
-        setHfRouteReady(Boolean(result.ok));
+        setHfRouteReady(true);
         setHfError(tokenPresent ? "none" : "token-missing");
       })
       .catch(() => {
         if (cancelled) return;
+        setHfRouteReady(false);
         setHfError("request-failed");
       });
 
@@ -563,13 +569,17 @@ export function AxisFullBodyTracker() {
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL("image/jpeg", 0.65);
+      const base64Image = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
 
       const response = await fetch("/api/axis/vision/huggingface", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           task,
-          image: dataUrl,
+          image: {
+            type: "base64",
+            value: base64Image,
+          },
           axisContext: {
             sessionId: sessionIdRef.current,
             cameraFacing,
@@ -596,11 +606,16 @@ export function AxisFullBodyTracker() {
         return;
       }
 
-      const result = await response.json() as { task: HfTask; result?: unknown };
+      const result = await response.json() as {
+        task: HfTask;
+        model: HfTask;
+        huggingFaceResult?: unknown;
+        result?: unknown;
+      };
 
       setHfLastResult((previous) => mergeVisionContextFrame(previous, {
         task,
-        result: result.result,
+        result: result.huggingFaceResult ?? result.result,
         timestampMs: Date.now(),
         cameraFacing,
         bodyDetected: frameStatus.bodyDetected,
@@ -879,7 +894,7 @@ function HuggingFaceVisionPanel({
   hasVisionResult: boolean;
 }) {
   const busy = hfState === "checking-objects" || hfState === "checking-mask" || hfState === "asking-ai";
-  const canCapture = truth.cameraActive && truth.poseDetected && hfTokenPresent && !busy;
+  const canCapture = truth.cameraActive && truth.poseDetected && hfTokenPresent && hfRouteReady && !busy;
 
   return (
     <section className="body-card">
@@ -923,7 +938,7 @@ function HuggingFaceVisionPanel({
         </button>
       </div>
       <p className="frame-message">
-        Hugging Face Inference API. Token is server-side only — never exposed to the browser.
+        Hugging Face Inference API. Token is server-side only - never exposed to the browser.
       </p>
     </section>
   );
@@ -944,6 +959,10 @@ function hfErrorLabel(error: HfError) {
   if (error === "token-missing") return "HF_TOKEN missing. Add it to Vercel env.";
   if (error === "frame-unavailable") return "Camera frame unavailable";
   if (error === "frame-too-large") return "Frame too large";
+  if (error === "token-unauthorized") return "Hugging Face token unauthorized. Check HF_TOKEN in Vercel.";
+  if (error === "model-not-found") return "Hugging Face model not found";
+  if (error === "input-mismatch") return "Hugging Face rejected the frame input";
+  if (error === "model-loading") return "Hugging Face model loading. Try again.";
   if (error === "request-failed") return "Request to Hugging Face failed";
   if (error === "result-unavailable") return "Vision result unavailable";
   if (error === "could-not-check") return "Could not check frame";
@@ -952,9 +971,13 @@ function hfErrorLabel(error: HfError) {
 
 function hfErrorFromCode(code: string): HfError {
   if (code === "HF_TOKEN_MISSING") return "token-missing";
-  if (code === "IMAGE_PAYLOAD_MISSING" || code === "FRAME_TOO_LARGE") return "frame-too-large";
-  if (code === "HF_401") return "request-failed";
-  if (code === "HF_MODEL_LOADING" || code === "HF_NETWORK_ERROR") return "request-failed";
+  if (code === "IMAGE_PAYLOAD_MISSING") return "frame-unavailable";
+  if (code === "FRAME_TOO_LARGE") return "frame-too-large";
+  if (code === "HF_401") return "token-unauthorized";
+  if (code === "HF_404") return "model-not-found";
+  if (code === "HF_INPUT_MISMATCH") return "input-mismatch";
+  if (code === "HF_MODEL_LOADING") return "model-loading";
+  if (code === "HF_NETWORK_ERROR") return "request-failed";
   return "could-not-check";
 }
 

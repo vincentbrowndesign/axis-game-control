@@ -7,6 +7,7 @@ export async function GET() {
 
   return Response.json({
     ok: missing.length === 0,
+    hfTokenPresent: Boolean(hfToken),
     runtime: "server",
     env: {
       hfTokenPresent: Boolean(hfToken),
