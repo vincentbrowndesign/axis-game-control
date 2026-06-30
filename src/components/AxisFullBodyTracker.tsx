@@ -18,9 +18,15 @@ type VisionErrorReason =
   | "none"
   | "key-missing"
   | "workflow-missing"
-  | "python-dependency-missing"
-  | "python-runner-unavailable"
+  | "qwen-workflow-missing"
+  | "frame-too-large"
+  | "roboflow-rejected-input"
+  | "workflow-input-mismatch"
+  | "roboflow-401"
+  | "roboflow-404"
+  | "roboflow-500"
   | "frame-unavailable"
+  | "image-payload-missing"
   | "request-failed"
   | "result-unavailable"
   | "could-not-check";
@@ -29,10 +35,13 @@ type VisionReadiness = {
   workspace: boolean;
   workflows: Record<RoboflowModel, boolean>;
 };
-type PythonRunnerStatus = {
-  checked: boolean;
-  available: boolean;
-  message: string;
+type VisionDebugDetails = {
+  domain: string;
+  apiRouteUrl: string;
+  model?: RoboflowModel;
+  workflowIdPresent?: boolean;
+  statusCode?: number;
+  sanitizedResponseBody?: unknown;
 };
 type AxisFullBodyTruth = {
   cameraActive: boolean;
@@ -269,11 +278,8 @@ export function AxisFullBodyTracker() {
       qwen_vl: false,
     },
   });
-  const [pythonRunnerStatus, setPythonRunnerStatus] = useState<PythonRunnerStatus>({
-    checked: false,
-    available: false,
-    message: "Python Roboflow runner not available in this environment.",
-  });
+  const [apiRouteReady, setApiRouteReady] = useState(false);
+  const [visionDebugDetails, setVisionDebugDetails] = useState<VisionDebugDetails | null>(null);
   const [visionContextFrame, setVisionContextFrame] = useState<AxisVisionContextFrame | null>(null);
 
   useEffect(() => {
@@ -291,31 +297,44 @@ export function AxisFullBodyTracker() {
   useEffect(() => {
     let cancelled = false;
 
-    void fetch("/api/axis/vision/roboflow")
+    void fetch("/api/axis/vision/roboflow/health")
       .then(async (response) => {
         if (!response.ok) throw new Error("Roboflow readiness failed");
         return (await response.json()) as {
-          apiKey?: boolean;
-          workspace?: boolean;
-          workflows?: Partial<Record<RoboflowModel, boolean>>;
+          ok?: boolean;
+          domain?: string;
+          env?: {
+            apiKeyPresent?: boolean;
+            workspacePresent?: boolean;
+            sam2WorkflowPresent?: boolean;
+            yoloWorkflowPresent?: boolean;
+            qwenWorkflowPresent?: boolean;
+          };
         };
       })
       .then((result) => {
         if (cancelled) return;
         setVisionReadiness({
-          apiKey: Boolean(result.apiKey),
-          workspace: Boolean(result.workspace),
+          apiKey: Boolean(result.env?.apiKeyPresent),
+          workspace: Boolean(result.env?.workspacePresent),
           workflows: {
-            sam2: Boolean(result.workflows?.sam2),
-            yolo_world: Boolean(result.workflows?.yolo_world),
-            qwen_vl: Boolean(result.workflows?.qwen_vl),
+            sam2: Boolean(result.env?.sam2WorkflowPresent),
+            yolo_world: Boolean(result.env?.yoloWorkflowPresent),
+            qwen_vl: Boolean(result.env?.qwenWorkflowPresent),
           },
         });
+        setApiRouteReady(Boolean(result.ok));
+        setVisionDebugDetails({
+          domain: result.domain || window.location.host,
+          apiRouteUrl: "/api/axis/vision/roboflow",
+        });
         setVisionErrorReason(
-          !result.apiKey
+          !result.env?.apiKeyPresent
             ? "key-missing"
-            : !result.workspace || !Object.values(result.workflows || {}).some(Boolean)
+            : !result.env?.workspacePresent
               ? "workflow-missing"
+              : !result.env?.qwenWorkflowPresent
+                ? "qwen-workflow-missing"
               : "none",
         );
       })
@@ -323,37 +342,6 @@ export function AxisFullBodyTracker() {
         if (cancelled) return;
         logVisionDebug("readiness", error);
         setVisionErrorReason("request-failed");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void fetch("/api/axis/vision/roboflow-python")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Python Roboflow runner unavailable");
-        return (await response.json()) as { available?: boolean; message?: string };
-      })
-      .then((result) => {
-        if (cancelled) return;
-        setPythonRunnerStatus({
-          checked: true,
-          available: Boolean(result.available),
-          message: result.message || "Python Roboflow runner not available in this environment.",
-        });
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        logVisionDebug("python-readiness", error);
-        setPythonRunnerStatus({
-          checked: true,
-          available: false,
-          message: "Python Roboflow runner not available in this environment.",
-        });
       });
 
     return () => {
@@ -609,7 +597,7 @@ export function AxisFullBodyTracker() {
     setVisionErrorReason("none");
 
     try {
-      const maxWidth = 960;
+      const maxWidth = 640;
       const scale = Math.min(1, maxWidth / video.videoWidth);
       canvas.width = Math.round(video.videoWidth * scale);
       canvas.height = Math.round(video.videoHeight * scale);
@@ -622,54 +610,54 @@ export function AxisFullBodyTracker() {
       }
 
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.65);
       const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
 
-      const response = await fetch(
-        pythonRunnerStatus.available
-          ? "/api/axis/vision/roboflow-python"
-          : "/api/axis/vision/roboflow",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model,
-            image: {
-              type: "base64",
-              value: base64,
-            },
-            axisContext: {
-              sessionId: sessionIdRef.current,
-              cameraFacing,
-              bodyDetected: frameStatus.bodyDetected,
-              fullBodyVisible: frameStatus.fullBodyVisible,
-              poseConfidence: frameStatus.confidence,
-              stanceRead: frame?.reads.stanceRead,
-              balanceRead: frame?.reads.balanceRead,
-              kneeBendRead: frame?.reads.kneeBendRead,
-              torsoLeanRead: frame?.reads.torsoLeanRead,
-              frameStatus: frameStatus.message,
-            },
-          }),
+      const response = await fetch("/api/axis/vision/roboflow", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          model,
+          image: {
+            type: "base64",
+            value: base64,
+          },
+          axisContext: {
+            sessionId: sessionIdRef.current,
+            cameraFacing,
+            bodyDetected: frameStatus.bodyDetected,
+            fullBodyVisible: frameStatus.fullBodyVisible,
+            poseConfidence: frameStatus.confidence,
+            stanceRead: frame?.reads.stanceRead,
+            balanceRead: frame?.reads.balanceRead,
+            kneeBendRead: frame?.reads.kneeBendRead,
+            torsoLeanRead: frame?.reads.torsoLeanRead,
+            frameStatus: frameStatus.message,
+          },
+        }),
+      });
 
       if (!response.ok) {
-        const errorResult = (await response.json().catch(() => null)) as { error?: string } | null;
+        const errorResult = (await response.json().catch(() => null)) as {
+          error?: string;
+          debug?: VisionDebugDetails;
+        } | null;
         setVisionErrorReason(visionErrorFromCode(errorResult?.error));
+        setVisionDebugDetails(errorResult?.debug || null);
         logVisionDebug("request", errorResult);
         setRoboflowState("error");
         return;
       }
 
-      const result = (await response.json()) as unknown;
+      const result = (await response.json()) as { debug?: VisionDebugDetails } | null;
       if (!result) {
         setVisionErrorReason("result-unavailable");
         setRoboflowState("error");
         return;
       }
+      setVisionDebugDetails(result.debug || null);
 
       setVisionContextFrame((previous) =>
         mergeVisionContextFrame(previous, {
@@ -881,7 +869,8 @@ export function AxisFullBodyTracker() {
           onTestRoboflow={(model) => void captureCurrentFrameAsBase64(model)}
           truth={truth}
           visionReadiness={visionReadiness}
-          pythonRunnerStatus={pythonRunnerStatus}
+          apiRouteReady={apiRouteReady}
+          visionDebugDetails={visionDebugDetails}
           roboflowState={roboflowState}
           hasVisionResult={Boolean(visionContextFrame)}
           visionErrorReason={visionErrorReason}
@@ -944,7 +933,8 @@ function VisionSupportPanel({
   onTestRoboflow,
   truth,
   visionReadiness,
-  pythonRunnerStatus,
+  apiRouteReady,
+  visionDebugDetails,
   roboflowState,
   hasVisionResult,
   visionErrorReason,
@@ -952,7 +942,8 @@ function VisionSupportPanel({
   onTestRoboflow: (model: RoboflowModel) => void;
   truth: AxisFullBodyTruth;
   visionReadiness: VisionReadiness;
-  pythonRunnerStatus: PythonRunnerStatus;
+  apiRouteReady: boolean;
+  visionDebugDetails: VisionDebugDetails | null;
   roboflowState: RoboflowState;
   hasVisionResult: boolean;
   visionErrorReason: VisionErrorReason;
@@ -968,6 +959,8 @@ function VisionSupportPanel({
         <StatusLine label="SAM2" value={visionReadiness.workflows.sam2 ? "Ready" : "Missing"} />
         <StatusLine label="YOLO" value={visionReadiness.workflows.yolo_world ? "Ready" : "Missing"} />
         <StatusLine label="Qwen" value={visionReadiness.workflows.qwen_vl ? "Ready" : "Missing"} />
+        <StatusLine label="API Route" value={apiRouteReady ? "Ready" : "Missing"} />
+        <StatusLine label="Last Error" value={visionErrorReason === "none" ? "None" : visionErrorLabel(visionErrorReason)} />
       </div>
       <div className="button-row">
         <button type="button" disabled={!canCheckVision("sam2", truth, visionReadiness)} onClick={() => onTestRoboflow("sam2")}>
@@ -980,9 +973,29 @@ function VisionSupportPanel({
           Ask Qwen
         </button>
       </div>
-      {pythonRunnerStatus.checked && !pythonRunnerStatus.available ? (
-        <p className="frame-message">{pythonRunnerStatus.message}</p>
-      ) : null}
+      <p className="frame-message">
+        Production uses Roboflow API route. Python runner is local-dev only.
+      </p>
+      <details className="vision-debug">
+        <summary>Debug</summary>
+        <div className="body-read-grid">
+          <StatusLine label="Domain" value={visionDebugDetails?.domain || "Unknown"} />
+          <StatusLine label="API Route" value={visionDebugDetails?.apiRouteUrl || "/api/axis/vision/roboflow"} />
+          <StatusLine label="Model" value={visionDebugDetails?.model || "None"} />
+          <StatusLine
+            label="Workflow"
+            value={visionDebugDetails?.workflowIdPresent ? "Present" : "Missing"}
+          />
+          <StatusLine
+            label="Status Code"
+            value={visionDebugDetails?.statusCode ? String(visionDebugDetails.statusCode) : "None"}
+          />
+          <StatusLine
+            label="Response"
+            value={formatDebugBody(visionDebugDetails?.sanitizedResponseBody)}
+          />
+        </div>
+      </details>
     </section>
   );
 }
@@ -1183,8 +1196,13 @@ function visionErrorFromCode(error?: string): VisionErrorReason {
   if (error === "ROBOFLOW_WORKSPACE_MISSING" || error === "ROBOFLOW_WORKFLOW_ID_MISSING") {
     return "workflow-missing";
   }
-  if (error === "PYTHON_DEPENDENCY_MISSING") return "python-dependency-missing";
-  if (error === "PYTHON_RUNNER_UNAVAILABLE") return "python-runner-unavailable";
+  if (error === "IMAGE_PAYLOAD_MISSING") return "image-payload-missing";
+  if (error === "FRAME_TOO_LARGE") return "frame-too-large";
+  if (error === "ROBOFLOW_401") return "roboflow-401";
+  if (error === "ROBOFLOW_404") return "roboflow-404";
+  if (error === "ROBOFLOW_500") return "roboflow-500";
+  if (error === "WORKFLOW_INPUT_MISMATCH") return "workflow-input-mismatch";
+  if (error === "ROBOFLOW_REJECTED_INPUT") return "roboflow-rejected-input";
   if (error === "ROBOFLOW_IMAGE_MISSING") return "frame-unavailable";
   if (error === "IMAGE_FILE_MISSING") return "frame-unavailable";
   if (error === "ROBOFLOW_NO_RESULT") return "result-unavailable";
@@ -1197,15 +1215,30 @@ function visionErrorFromCode(error?: string): VisionErrorReason {
 function visionErrorLabel(reason: VisionErrorReason) {
   if (reason === "key-missing") return "Roboflow key missing";
   if (reason === "workflow-missing") return "Workflow ID missing";
-  if (reason === "python-dependency-missing") return "Python dependency missing";
-  if (reason === "python-runner-unavailable") {
-    return "Python Roboflow runner not available in this environment.";
-  }
+  if (reason === "qwen-workflow-missing") return "Qwen workflow missing";
+  if (reason === "image-payload-missing") return "Image payload missing";
+  if (reason === "frame-too-large") return "Frame too large";
+  if (reason === "roboflow-rejected-input") return "Roboflow rejected input";
+  if (reason === "workflow-input-mismatch") return "Workflow input mismatch";
+  if (reason === "roboflow-401") return "Roboflow returned 401";
+  if (reason === "roboflow-404") return "Roboflow returned 404";
+  if (reason === "roboflow-500") return "Roboflow returned 500";
   if (reason === "frame-unavailable") return "Camera frame unavailable";
   if (reason === "request-failed") return "Roboflow request failed";
   if (reason === "result-unavailable") return "Vision result unavailable";
   if (reason === "could-not-check") return "Could not check frame";
   return "Vision unavailable";
+}
+
+function formatDebugBody(value: unknown) {
+  if (!value) return "None";
+  if (typeof value === "string") return value.slice(0, 120);
+
+  try {
+    return JSON.stringify(value).slice(0, 120);
+  } catch {
+    return "Unavailable";
+  }
 }
 
 function logVisionDebug(label: string, detail: unknown) {

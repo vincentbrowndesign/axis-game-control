@@ -312,6 +312,23 @@ button {
   margin: 0;
 }
 
+.vision-debug {
+  border-top: 1px solid rgba(248, 250, 252, 0.1);
+  padding-top: 0.65rem;
+}
+
+.vision-debug summary {
+  color: rgba(248, 250, 252, 0.72);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.vision-debug .body-read-grid {
+  margin-top: 0.65rem;
+}
+
 .dashboard-primary-card strong {
   display: block;
   font-size: 1.25rem;
