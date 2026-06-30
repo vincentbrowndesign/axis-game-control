@@ -46,6 +46,88 @@ export function ClipRoomNew({ mode }: Props) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
+  // Holds the file reference when picked before auth is confirmed, so we can retry.
+  const pendingUploadRef = useRef<File | null>(null);
+
+  const uploadVideo = useCallback(async (file: File) => {
+    if (auth.status !== "signed_in") {
+      pendingUploadRef.current = file;
+      return;
+    }
+
+    try {
+      const token = await getAxisAccessToken();
+
+      // Step 1: Initialize the upload — server returns a pre-signed Cloudflare URL.
+      // The video bytes never go through our server.
+      const initRes = await fetch("/api/clip-room/ingest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          filename: file.name || "clip.mp4",
+          fileSize: file.size,
+          origin: mode === "record" ? "recorded" : "uploaded",
+        }),
+      });
+
+      if (!initRes.ok) {
+        const data = await initRes.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error ?? "Upload could not start. Please try again.");
+      }
+
+      const initData = await initRes.json() as {
+        clipId?: string;
+        clipSourceId?: string;
+        uploadURL?: string;
+        streamVideoId?: string;
+        fileName?: string;
+        fileSize?: number;
+      };
+
+      const clipSourceId = initData.clipSourceId ?? initData.clipId;
+      const uploadURL = initData.uploadURL;
+
+      if (!clipSourceId || !uploadURL) {
+        throw new Error("Upload could not start. Please try again.");
+      }
+
+      // Persist clipSourceId immediately so user can fill setup while upload runs.
+      setClip({
+        clipSourceId,
+        fileName: initData.fileName ?? file.name ?? "clip.mp4",
+        fileSize: initData.fileSize ?? file.size,
+        streamVideoId: initData.streamVideoId ?? null,
+        uploadStatus: "uploading",
+      });
+
+      // Step 2: Upload directly to Cloudflare's pre-signed URL (bypasses server body limits).
+      await xhrDirectUpload(uploadURL, file, setUploadProgress);
+
+      setClip((c) => c ? { ...c, uploadStatus: "uploaded" } : c);
+      setUploadProgress(100);
+    } catch (err) {
+      setClip((c) => c ? { ...c, uploadStatus: "failed" } : c);
+      setError(err instanceof Error ? err.message : "Upload could not start. Please choose a video and try again.");
+    }
+  }, [auth.status, mode]);
+
+  // Retry upload when auth resolves if a file is waiting.
+  useEffect(() => {
+    const f = pendingUploadRef.current;
+    if (auth.status === "signed_in" && f && stage === "setup") {
+      pendingUploadRef.current = null;
+      void uploadVideo(f);
+    }
+    if (auth.status === "signed_out" && pendingUploadRef.current) {
+      pendingUploadRef.current = null;
+      setClip((c) => c ? { ...c, uploadStatus: "failed" } : c);
+      setError("Sign in to save and process this clip.");
+    }
+  }, [auth.status, stage, uploadVideo]);
+
   function handleCaptureDone(file: File) {
     const nextClip: UploadedClip = {
       clipSourceId: null,
@@ -58,36 +140,12 @@ export function ClipRoomNew({ mode }: Props) {
     setError(null);
     setUploadProgress(0);
     setStage("setup");
-    void uploadVideo(file);
-  }
 
-  async function uploadVideo(file: File) {
-    if (auth.status !== "signed_in") {
-      setClip((current) => current ? { ...current, uploadStatus: "failed" } : current);
-      setError("Sign in to save and process this clip.");
-      return;
-    }
-
-    try {
-      const token = await getAxisAccessToken();
-      const uploaded = await xhrVideoUpload(
-        "/api/clip-room/ingest",
-        file,
-        mode,
-        token,
-        setUploadProgress,
-      );
-      setClip({
-        clipSourceId: uploaded.clipSourceId,
-        fileName: uploaded.fileName || file.name || "clip.mp4",
-        fileSize: uploaded.fileSize || file.size,
-        streamVideoId: uploaded.streamVideoId,
-        uploadStatus: "uploaded",
-      });
-      setUploadProgress(100);
-    } catch {
-      setClip((current) => current ? { ...current, uploadStatus: "failed" } : current);
-      setError("Upload could not start. Please choose a video and try again.");
+    if (auth.status === "signed_in") {
+      void uploadVideo(file);
+    } else {
+      // Auth still loading — hold the file and retry in the effect above.
+      pendingUploadRef.current = file;
     }
   }
 
@@ -576,31 +634,20 @@ function ClipSetupForm({ clip, setup, onChange, onBack, onChooseAgain, onSubmit,
   );
 }
 
-// ─── XHR upload with progress ────────────────────────────────────────────────
+// ─── Direct XHR upload to Cloudflare pre-signed URL ─────────────────────────
 
-type UploadResponse = {
-  clipId?: string;
-  clipSourceId?: string;
-  fileName?: string;
-  fileSize?: number;
-  streamVideoId?: string;
-};
-
-function xhrVideoUpload(
-  url: string,
+function xhrDirectUpload(
+  uploadURL: string,
   file: File,
-  origin: "record" | "upload",
-  token: string | null,
   onProgress: (pct: number) => void,
-): Promise<Required<Pick<UploadResponse, "clipSourceId" | "fileName" | "fileSize" | "streamVideoId">>> {
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const form = new FormData();
-    form.append("video", file);
-    form.append("origin", origin === "record" ? "recorded" : "uploaded");
+    form.append("file", file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.open("POST", uploadURL);
+    // No auth header — Cloudflare direct upload URLs are pre-authenticated.
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -610,35 +657,15 @@ function xhrVideoUpload(
 
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const data = JSON.parse(xhr.responseText) as UploadResponse;
-          const clipSourceId = data.clipSourceId ?? data.clipId;
-          if (clipSourceId) {
-            resolve({
-              clipSourceId,
-              fileName: data.fileName ?? file.name,
-              fileSize: data.fileSize ?? file.size,
-              streamVideoId: data.streamVideoId ?? "",
-            });
-          } else {
-            reject(new Error("No clipSourceId returned"));
-          }
-        } catch {
-          reject(new Error("Invalid response"));
-        }
+        resolve();
       } else {
-        try {
-          const data = JSON.parse(xhr.responseText) as { error?: string };
-          reject(new Error(data.error ?? `Server error ${xhr.status}`));
-        } catch {
-          reject(new Error(`Server error ${xhr.status}`));
-        }
+        reject(new Error(`Upload failed (${xhr.status}). Please try again.`));
       }
     };
 
-    xhr.onerror = () => reject(new Error("Network error"));
-    xhr.ontimeout = () => reject(new Error("Upload timed out"));
-    xhr.timeout = 5 * 60 * 1000; // 5 min
+    xhr.onerror = () => reject(new Error("Network error during upload. Check your connection and try again."));
+    xhr.ontimeout = () => reject(new Error("Upload timed out. Please try again."));
+    xhr.timeout = 10 * 60 * 1000; // 10 min for large files
 
     xhr.send(form);
   });
