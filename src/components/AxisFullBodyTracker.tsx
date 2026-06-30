@@ -38,7 +38,12 @@ type VisionReadiness = {
 type VisionDebugDetails = {
   domain: string;
   apiRouteUrl: string;
+  upstreamUrl?: string;
+  method?: string;
   model?: RoboflowModel;
+  apiKeyPresent?: boolean;
+  apiKeyLength?: number;
+  workflowId?: string;
   workflowIdPresent?: boolean;
   statusCode?: number;
   sanitizedResponseBody?: unknown;
@@ -981,7 +986,18 @@ function VisionSupportPanel({
         <div className="body-read-grid">
           <StatusLine label="Domain" value={visionDebugDetails?.domain || "Unknown"} />
           <StatusLine label="API Route" value={visionDebugDetails?.apiRouteUrl || "/api/axis/vision/roboflow"} />
+          <StatusLine label="Upstream" value={visionDebugDetails?.upstreamUrl || "None"} />
+          <StatusLine label="Method" value={visionDebugDetails?.method || "POST"} />
           <StatusLine label="Model" value={visionDebugDetails?.model || "None"} />
+          <StatusLine
+            label="API Key"
+            value={visionDebugDetails?.apiKeyPresent ? "Present" : "Missing"}
+          />
+          <StatusLine
+            label="Key Length"
+            value={String(visionDebugDetails?.apiKeyLength || 0)}
+          />
+          <StatusLine label="Workflow ID" value={visionDebugDetails?.workflowId || "Missing"} />
           <StatusLine
             label="Workflow"
             value={visionDebugDetails?.workflowIdPresent ? "Present" : "Missing"}
@@ -1220,8 +1236,8 @@ function visionErrorLabel(reason: VisionErrorReason) {
   if (reason === "frame-too-large") return "Frame too large";
   if (reason === "roboflow-rejected-input") return "Roboflow rejected input";
   if (reason === "workflow-input-mismatch") return "Workflow input mismatch";
-  if (reason === "roboflow-401") return "Roboflow returned 401";
-  if (reason === "roboflow-404") return "Roboflow returned 404";
+  if (reason === "roboflow-401") return "Roboflow key unauthorized. Check ROBOFLOW_API_KEY in Vercel.";
+  if (reason === "roboflow-404") return "Workflow path not found. Check workspace/workflow ID.";
   if (reason === "roboflow-500") return "Roboflow returned 500";
   if (reason === "frame-unavailable") return "Camera frame unavailable";
   if (reason === "request-failed") return "Roboflow request failed";

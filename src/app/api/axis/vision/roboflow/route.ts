@@ -82,7 +82,7 @@ export async function POST(request: Request) {
         model,
         error: "IMAGE_PAYLOAD_MISSING",
         reason: "Image payload missing",
-        debug: buildDebugPayload(request, model, workflowId, 400),
+        debug: buildDebugPayload(request, model, workflowId, undefined, 400),
       },
       { status: 400 },
     );
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
         model,
         error: "FRAME_TOO_LARGE",
         reason: "Frame too large",
-        debug: buildDebugPayload(request, model, workflowId, 413),
+        debug: buildDebugPayload(request, model, workflowId, undefined, 413),
       },
       { status: 413 },
     );
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
         model,
         error: "ROBOFLOW_API_KEY_MISSING",
         reason: "Roboflow API key missing",
-        debug: buildDebugPayload(request, model, workflowId, 500),
+        debug: buildDebugPayload(request, model, workflowId, undefined, 500),
       },
       { status: 500 },
     );
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
         model,
         error: "ROBOFLOW_WORKSPACE_MISSING",
         reason: "Roboflow workspace missing",
-        debug: buildDebugPayload(request, model, workflowId, 500),
+        debug: buildDebugPayload(request, model, workflowId, undefined, 500),
       },
       { status: 500 },
     );
@@ -141,18 +141,16 @@ export async function POST(request: Request) {
         model,
         error: "ROBOFLOW_WORKFLOW_ID_MISSING",
         reason: model === "qwen_vl" ? "Qwen workflow missing" : "Workflow ID missing",
-        debug: buildDebugPayload(request, model, workflowId, 500),
+        debug: buildDebugPayload(request, model, workflowId, undefined, 500),
       },
       { status: 500 },
     );
   }
 
-  const endpoint = `https://serverless.roboflow.com/${encodeURIComponent(
-    workspace,
-  )}/workflows/${encodeURIComponent(workflowId)}`;
+  const upstreamUrl = `https://serverless.roboflow.com/${workspace}/workflows/${workflowId}`;
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(upstreamUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -181,6 +179,7 @@ export async function POST(request: Request) {
             request,
             model,
             workflowId,
+            upstreamUrl,
             response.status,
             sanitizedResponseBody,
           ),
@@ -195,7 +194,7 @@ export async function POST(request: Request) {
       workflowId,
       roboflowResult,
       axisContext: body?.axisContext,
-      debug: buildDebugPayload(request, model, workflowId, response.status),
+      debug: buildDebugPayload(request, model, workflowId, upstreamUrl, response.status),
       aiUse: {
         purpose: aiPurposeByModel[model],
         summary: "Frame checked with Axis body context attached.",
@@ -210,7 +209,7 @@ export async function POST(request: Request) {
         workflowId,
         reason: "Roboflow request failed",
         message: error instanceof Error ? error.message : "Roboflow request failed.",
-        debug: buildDebugPayload(request, model, workflowId, 502),
+        debug: buildDebugPayload(request, model, workflowId, upstreamUrl, 502),
       },
       { status: 502 },
     );
@@ -261,10 +260,15 @@ async function parseRoboflowResponse(response: Response) {
 export function buildHealthPayload(request: Request) {
   const env = {
     apiKeyPresent: Boolean(process.env.ROBOFLOW_API_KEY),
+    apiKeyLength: process.env.ROBOFLOW_API_KEY?.length || 0,
     workspacePresent: Boolean(process.env.ROBOFLOW_WORKSPACE),
+    workspace: process.env.ROBOFLOW_WORKSPACE || "",
     sam2WorkflowPresent: Boolean(workflowMap.sam2),
+    sam2WorkflowId: workflowMap.sam2 || "",
     yoloWorkflowPresent: Boolean(workflowMap.yolo_world),
+    yoloWorkflowId: workflowMap.yolo_world || "",
     qwenWorkflowPresent: Boolean(workflowMap.qwen_vl),
+    qwenWorkflowId: workflowMap.qwen_vl || "",
   };
   const missing = [
     !env.apiKeyPresent ? "ROBOFLOW_API_KEY" : "",
@@ -286,13 +290,19 @@ function buildDebugPayload(
   request: Request,
   model: RoboflowModel,
   workflowId: string | undefined,
+  upstreamUrl?: string,
   statusCode?: number,
   sanitizedResponseBody?: unknown,
 ) {
   return {
     domain: request.headers.get("host") || "local",
     apiRouteUrl: new URL(request.url).pathname,
+    upstreamUrl,
+    method: "POST",
     model,
+    apiKeyPresent: Boolean(process.env.ROBOFLOW_API_KEY),
+    apiKeyLength: process.env.ROBOFLOW_API_KEY?.length || 0,
+    workflowId: workflowId || "",
     workflowIdPresent: Boolean(workflowId),
     statusCode,
     sanitizedResponseBody,
@@ -308,8 +318,8 @@ function roboflowErrorCode(status: number) {
 }
 
 function roboflowErrorReason(status: number) {
-  if (status === 401) return "Roboflow returned 401";
-  if (status === 404) return "Roboflow returned 404";
+  if (status === 401) return "Roboflow key unauthorized. Check ROBOFLOW_API_KEY in Vercel.";
+  if (status === 404) return "Workflow path not found. Check workspace/workflow ID.";
   if (status >= 500) return "Roboflow returned 500";
   if (status === 400 || status === 422) return "Workflow input mismatch";
   return "Roboflow rejected input";
