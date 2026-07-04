@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AxisPoseFrame } from "../../lib/axis/axis-pose-detector";
 import type { AxisMovementChain } from "../../axis/biomechanics/movement-chain-types";
-import { buildAxisLoadChain } from "../../axis/biomechanics/load-chain-builder";
+import { buildAxisLoadChain, saveAxisMovementChain } from "../../axis/biomechanics/load-chain-builder";
 import { renderAxisMovementChain } from "../../axis/biomechanics/movement-chain-renderer";
 import type { AxisDetectedObject, AxisEvidence, AxisVisionRead } from "../../axis/core/types";
+import { axisFeatureFlags } from "../../axis/core/feature-flags";
 import {
   openAxisCameraSource,
   type AxisCameraFacingMode,
@@ -17,6 +18,7 @@ import type { AxisCommand } from "../../axis/query/axis-command-types";
 import { saveAxisCommandMetadata } from "../../axis/query/axis-command-store";
 import { parseAxisOpenCommand } from "../../axis/query/open-command-parser";
 import { AxisQueryToolbar } from "../../axis/query/query-toolbar";
+import { saveAxisMemoryPage, sessionObjectToMemoryPage } from "../../axis/memory/memory-store";
 import { saveAxisSessionObject, visionReadToSessionObject } from "../../axis/session/session-store";
 import { loadAxisMediaPipePoseAdapter, type AxisMediaPipePoseAdapter } from "../../axis/vision/mediapipe-pose-adapter";
 import {
@@ -46,7 +48,6 @@ export function AxisSessionCamera({ onEvidence, sessionId }: Props) {
   const poseAdapterRef = useRef<AxisMediaPipePoseAdapter | null>(null);
   const latestPlayerReadRef = useRef<AxisVisionRead | null>(null);
   const latestLoadChainRef = useRef<AxisMovementChain | null>(null);
-  const chainVisibleRef = useRef(false);
   const previousSmoothedReadRef = useRef<AxisVisionRead | null>(null);
   const playerReadWindowRef = useRef<AxisVisionRead[]>([]);
   const rafRef = useRef<number | null>(null);
@@ -95,11 +96,9 @@ export function AxisSessionCamera({ onEvidence, sessionId }: Props) {
       const adapter = poseAdapterRef.current ?? await withTimeout(loadAxisMediaPipePoseAdapter(), 1600);
       poseAdapterRef.current = adapter;
       poseFrame = adapter?.detect(video, timestampMs) ?? null;
-      const loadChain = buildAxisLoadChain(poseFrame, {
-        sessionId,
-        timestampMs,
-      });
-      latestLoadChainRef.current = loadChain;
+      latestLoadChainRef.current = axisFeatureFlags.movementChains
+        ? buildAxisLoadChain(poseFrame, { sessionId, timestampMs })
+        : null;
       poseCandidate = poseFrameToPlayerCandidate(poseFrame, {
         timestampMs,
         videoHeight: video.videoHeight,
@@ -143,7 +142,7 @@ export function AxisSessionCamera({ onEvidence, sessionId }: Props) {
           read: latestPlayerReadRef.current,
           video,
         });
-        if (chainVisibleRef.current) {
+        if (axisFeatureFlags.movementChains) {
           renderAxisMovementChain(overlay, {
             chain: latestLoadChainRef.current,
             video,
@@ -212,7 +211,14 @@ export function AxisSessionCamera({ onEvidence, sessionId }: Props) {
 
     const evidence = playerVisionReadToEvidence(read);
     saveAxisVisionReadEvidence(read);
-    saveAxisSessionObject(visionReadToSessionObject(read));
+    const sessionObject = visionReadToSessionObject(read);
+    saveAxisSessionObject(sessionObject);
+    if (axisFeatureFlags.memoryPages) {
+      saveAxisMemoryPage(sessionObjectToMemoryPage(sessionObject));
+    }
+    if (axisFeatureFlags.movementChains && latestLoadChainRef.current) {
+      saveAxisMovementChain(latestLoadChainRef.current);
+    }
     onEvidence([evidence]);
     return read;
   }
@@ -264,7 +270,6 @@ export function AxisSessionCamera({ onEvidence, sessionId }: Props) {
       previousSmoothedReadRef.current = null;
       latestPlayerReadRef.current = null;
       latestLoadChainRef.current = null;
-      chainVisibleRef.current = false;
       saveAxisCommandMetadata(command, null);
       return "Reset";
     }
@@ -334,16 +339,20 @@ export function AxisSessionCamera({ onEvidence, sessionId }: Props) {
   }
 
   function saveAxisNote(command: AxisCommand & { type: "note" }) {
-    saveAxisSessionObject({
+    const sessionObject = {
       createdAt: command.createdAt,
       evidenceIds: command.attachedToReadId ? [`axis-evidence-${command.attachedToReadId}`] : [],
       id: `axis-session-object-${command.id}`,
-      kind: "note",
+      kind: "note" as const,
       label: noteLabel(command.noteKind),
-      reviewState: command.noteKind === "question" ? "needs_review" : "ready",
+      reviewState: command.noteKind === "question" ? "needs_review" as const : "ready" as const,
       searchableText: [command.raw, command.noteKind, command.attachedToReadId].filter(Boolean).join(" "),
       sessionId,
-    });
+    };
+    saveAxisSessionObject(sessionObject);
+    if (axisFeatureFlags.memoryPages) {
+      saveAxisMemoryPage(sessionObjectToMemoryPage(sessionObject));
+    }
   }
 
   async function loadUploadFallback(file: File | null) {

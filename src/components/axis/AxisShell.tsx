@@ -275,7 +275,7 @@ export function AxisShell() {
           </>
         )}
 
-        <AxisMemoryPreview sessions={recentMemory.slice(0, 3)} compact />
+        {shellStatus !== "running" && <AxisMemoryPreview sessions={recentMemory.slice(0, 3)} compact />}
       </section>
 
       <style jsx global>{axisShellStyles}</style>

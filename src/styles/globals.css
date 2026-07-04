@@ -9691,3 +9691,2473 @@ button.axis-review-row:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+/* Axis Measures / Axis Calibrate reset */
+
+.axis-measures-home,
+.axis-measures-index,
+.axis-measures-simple,
+.axis-measures-shell {
+  background:
+    linear-gradient(180deg, rgba(142, 255, 67, 0.055), transparent 22rem),
+    #050706;
+  color: #f6f8f0;
+  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+}
+
+.axis-measures-home *,
+.axis-measures-index *,
+.axis-measures-simple *,
+.axis-measures-shell * {
+  box-sizing: border-box;
+}
+
+.axis-measures-home a,
+.axis-measures-index a,
+.axis-measures-simple a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.axis-measures-home header,
+.axis-measures-index header,
+.axis-measures-simple header,
+.axis-calibrate-topbar {
+  align-items: center;
+  border-bottom: 1px solid rgba(246, 248, 240, 0.12);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-height: 4.5rem;
+  padding: 0.9rem clamp(1rem, 3vw, 2rem);
+}
+
+.axis-measures-home header span,
+.axis-measures-home header a,
+.axis-measures-index header a,
+.axis-measures-simple header a,
+.axis-measures-simple article span,
+.axis-calibrate-brand,
+.axis-field span,
+.axis-rail-label,
+.axis-mode-button span,
+.axis-stage-head span,
+.axis-readout-panel p,
+.axis-record-preview span,
+.axis-record-preview dt,
+.axis-record-preview dd,
+.axis-export-actions span,
+.axis-export-actions button,
+.axis-panel-header,
+.axis-btn,
+.axis-tab,
+.axis-instrument-action {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.axis-measures-home nav,
+.axis-measures-index header,
+.axis-calibrate-topbar,
+.axis-topbar-actions {
+  flex-wrap: wrap;
+}
+
+.axis-topbar-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.axis-measures-home nav {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.axis-measures-home nav a,
+.axis-measures-index header a,
+.axis-measures-simple header a,
+.axis-instrument-action,
+.axis-export-actions button,
+.axis-btn,
+.axis-tab {
+  appearance: none;
+  background: rgba(246, 248, 240, 0.06);
+  border: 1px solid rgba(246, 248, 240, 0.16);
+  border-radius: 0;
+  color: #f6f8f0;
+  cursor: pointer;
+  min-height: 2.75rem;
+  padding: 0.72rem 0.9rem;
+}
+
+.axis-instrument-action,
+.axis-btn--primary,
+.axis-tab--active {
+  background: #9dff45;
+  border-color: #9dff45;
+  color: #050706;
+}
+
+.axis-instrument-action--secondary {
+  background: rgba(246, 248, 240, 0.06);
+  border-color: rgba(157, 255, 69, 0.42);
+  color: #9dff45;
+}
+
+.axis-measures-home section,
+.axis-measures-index section {
+  align-content: center;
+  display: grid;
+  gap: 1rem;
+  min-height: 62dvh;
+  padding: clamp(2rem, 6vw, 5rem);
+}
+
+.axis-measures-home section p,
+.axis-measures-index section p,
+.axis-stage-head span,
+.axis-measures-simple article span {
+  color: #9dff45;
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.axis-measures-home h1,
+.axis-measures-index h1,
+.axis-measures-simple h1,
+.axis-stage-head h1 {
+  font-size: clamp(3rem, 10vw, 8rem);
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.86;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.axis-measures-home section strong {
+  color: rgba(246, 248, 240, 0.72);
+  font-size: clamp(1.05rem, 2vw, 1.6rem);
+  max-width: 42rem;
+}
+
+.axis-measures-home section a {
+  background: #f6f8f0;
+  color: #050706;
+  font-weight: 900;
+  justify-self: start;
+  min-height: 3rem;
+  padding: 0.9rem 1rem;
+  text-transform: uppercase;
+}
+
+.axis-measures-home > div,
+.axis-measures-index > div,
+.axis-measures-simple section {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  padding: 1rem clamp(1rem, 3vw, 2rem) 2rem;
+}
+
+.axis-measures-home > div span,
+.axis-measures-index > div a,
+.axis-measures-simple article,
+.axis-readout-panel,
+.axis-record-preview,
+.axis-export-actions,
+.axis-proof-card,
+.axis-landmark-panel,
+.axis-measurement-panel,
+.axis-rep-timeline {
+  background: rgba(246, 248, 240, 0.035);
+  border: 1px solid rgba(246, 248, 240, 0.13);
+  min-width: 0;
+  padding: 0.85rem;
+}
+
+.axis-measures-index > div a,
+.axis-measures-simple article {
+  display: grid;
+  gap: 0.55rem;
+  min-height: 10rem;
+}
+
+.axis-measures-index > div strong,
+.axis-measures-simple article strong {
+  color: #f6f8f0;
+  font-size: clamp(1.6rem, 4vw, 3.2rem);
+  line-height: 0.9;
+  text-transform: uppercase;
+}
+
+.axis-measures-index > div span,
+.axis-measures-simple article p {
+  color: rgba(246, 248, 240, 0.6);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.axis-calibrate-root {
+  display: grid;
+  gap: 0;
+}
+
+.axis-calibrate-brand {
+  color: #9dff45;
+  font-size: 1rem;
+  text-decoration: none;
+}
+
+.axis-field {
+  display: grid;
+  gap: 0.25rem;
+  min-width: min(100%, 13rem);
+}
+
+.axis-field select {
+  background: #0b0d0b;
+  border: 1px solid rgba(246, 248, 240, 0.18);
+  color: #f6f8f0;
+  min-height: 2.6rem;
+  padding: 0 0.75rem;
+}
+
+.axis-calibrate-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 13.5rem minmax(0, 1fr) minmax(18rem, 24rem);
+  padding: 0.75rem;
+}
+
+.axis-calibrate-rail,
+.axis-calibrate-main,
+.axis-calibrate-aside {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.axis-calibrate-rail,
+.axis-calibrate-aside {
+  align-content: start;
+}
+
+.axis-rail-label {
+  color: rgba(246, 248, 240, 0.52);
+  font-size: 0.68rem;
+}
+
+.axis-mode-button {
+  background: rgba(246, 248, 240, 0.035);
+  border: 1px solid rgba(246, 248, 240, 0.12);
+  color: #f6f8f0;
+  cursor: pointer;
+  display: grid;
+  gap: 0.32rem;
+  min-height: 4rem;
+  padding: 0.72rem;
+  text-align: left;
+}
+
+.axis-mode-button[data-active="true"] {
+  border-color: rgba(157, 255, 69, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(157, 255, 69, 0.22);
+}
+
+.axis-mode-button strong {
+  font-size: 0.92rem;
+  text-transform: uppercase;
+}
+
+.axis-mode-button span,
+.axis-readout-panel p {
+  color: rgba(246, 248, 240, 0.58);
+  font-size: 0.62rem;
+}
+
+.axis-stage-head {
+  align-items: end;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.4fr);
+}
+
+.axis-stage-head p {
+  color: rgba(246, 248, 240, 0.62);
+  line-height: 1.35;
+  margin: 0;
+}
+
+.axis-capture-instrument {
+  border: 1px solid rgba(157, 255, 69, 0.28);
+  min-height: min(68dvh, 45rem);
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-capture-frame {
+  display: grid;
+  gap: 0;
+  height: 100%;
+}
+
+.axis-capture-mode-tabs,
+.axis-capture-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.55rem;
+}
+
+.axis-capture-viewport {
+  background:
+    linear-gradient(rgba(246, 248, 240, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(246, 248, 240, 0.055) 1px, transparent 1px),
+    #080a08;
+  background-size: 3rem 3rem, 3rem 3rem, auto;
+  min-height: clamp(22rem, 52dvh, 40rem);
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-capture-video,
+.axis-capture-upload-preview {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.axis-capture-idle {
+  align-items: center;
+  color: rgba(246, 248, 240, 0.48);
+  display: grid;
+  font-weight: 900;
+  inset: 0;
+  place-items: center;
+  position: absolute;
+  text-transform: uppercase;
+}
+
+.axis-skeleton-placeholder {
+  inset: 4.2rem 0 4rem;
+  pointer-events: none;
+  position: absolute;
+  z-index: 4;
+}
+
+.axis-skeleton-placeholder i {
+  background: rgba(157, 255, 69, 0.78);
+  display: block;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform-origin: center;
+}
+
+.axis-skeleton-head {
+  border-radius: 999px;
+  height: 1.4rem;
+  margin-left: -0.7rem;
+  margin-top: -8.8rem;
+  width: 1.4rem;
+}
+
+.axis-skeleton-trunk {
+  height: 8rem;
+  margin-left: -1px;
+  margin-top: -7rem;
+  width: 2px;
+}
+
+.axis-skeleton-left-arm,
+.axis-skeleton-right-arm,
+.axis-skeleton-left-leg,
+.axis-skeleton-right-leg {
+  height: 6.5rem;
+  width: 2px;
+}
+
+.axis-skeleton-left-arm {
+  transform: rotate(34deg);
+}
+
+.axis-skeleton-right-arm {
+  transform: rotate(-34deg);
+}
+
+.axis-skeleton-left-leg {
+  margin-top: 1rem;
+  transform: rotate(16deg);
+}
+
+.axis-skeleton-right-leg {
+  margin-top: 1rem;
+  transform: rotate(-16deg);
+}
+
+.axis-skeleton-placeholder span,
+.axis-floor-calibration-line {
+  color: rgba(157, 255, 69, 0.74);
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  position: absolute;
+  text-transform: uppercase;
+}
+
+.axis-skeleton-placeholder span {
+  left: 0.75rem;
+  top: 0.75rem;
+}
+
+.axis-floor-calibration-line {
+  border-top: 2px solid rgba(157, 255, 69, 0.72);
+  bottom: 7.2rem;
+  left: 8%;
+  padding-top: 0.35rem;
+  right: 8%;
+  z-index: 5;
+}
+
+.axis-panel-header {
+  align-items: center;
+  border-bottom: 1px solid rgba(246, 248, 240, 0.1);
+  color: #f6f8f0;
+  display: flex;
+  font-size: 0.68rem;
+  justify-content: space-between;
+  margin: -0.85rem -0.85rem 0.75rem;
+  min-height: 2.4rem;
+  padding: 0 0.85rem;
+}
+
+.axis-panel-header strong,
+.axis-conf--ok,
+.axis-delta--pos,
+.axis-proof-delta--pos {
+  color: #9dff45;
+}
+
+.axis-landmark-group-label,
+.axis-measurement-empty,
+.axis-landmark-empty,
+.axis-rep-empty,
+.axis-proof-card-empty {
+  color: rgba(246, 248, 240, 0.52);
+  margin: 0;
+}
+
+.axis-landmark-row,
+.axis-measurement-row {
+  align-items: center;
+  border-bottom: 1px solid rgba(246, 248, 240, 0.08);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 2.3rem;
+}
+
+.axis-dot {
+  border-radius: 999px;
+  height: 0.55rem;
+  width: 0.55rem;
+}
+
+.axis-dot--ok {
+  background: #9dff45;
+}
+
+.axis-dot--warn {
+  background: #d8b44a;
+}
+
+.axis-dot--err {
+  background: #ff684a;
+}
+
+.axis-dot--idle {
+  background: rgba(246, 248, 240, 0.28);
+}
+
+.axis-landmark-label,
+.axis-landmark-conf,
+.axis-measurement-label,
+.axis-measurement-value,
+.axis-rep-index,
+.axis-rep-duration,
+.axis-rep-label,
+.axis-proof-card,
+.axis-record-preview {
+  color: #f6f8f0;
+}
+
+.axis-measurement-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.axis-measurement-value {
+  color: #9dff45;
+  font-weight: 900;
+}
+
+.axis-rep-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.axis-rep-chip {
+  background: rgba(246, 248, 240, 0.04);
+  border: 1px solid rgba(246, 248, 240, 0.13);
+  color: #f6f8f0;
+  cursor: pointer;
+  display: grid;
+  gap: 0.18rem;
+  min-height: 3.2rem;
+  min-width: 7rem;
+  padding: 0.55rem;
+  text-align: left;
+}
+
+.axis-rep-chip--selected {
+  border-color: rgba(157, 255, 69, 0.62);
+}
+
+.axis-calibrate-footer {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(14rem, 0.45fr);
+  padding: 0 0.75rem 0.75rem;
+}
+
+.axis-record-preview,
+.axis-export-actions {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.axis-record-preview strong {
+  color: #f6f8f0;
+  font-size: clamp(1.4rem, 3vw, 2.4rem);
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.axis-record-preview p {
+  color: rgba(246, 248, 240, 0.62);
+  margin: 0;
+}
+
+.axis-record-preview dl {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.axis-record-preview dt,
+.axis-record-preview dd {
+  margin: 0;
+}
+
+.axis-record-preview dd {
+  color: #9dff45;
+}
+
+.axis-proof-card-header,
+.axis-proof-card-footer,
+.axis-proof-card-row {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.axis-proof-card-meta {
+  display: grid;
+  gap: 0.2rem;
+  text-align: right;
+}
+
+.axis-proof-card-label,
+.axis-proof-card-footer span {
+  color: #9dff45;
+}
+
+.axis-proof-card-measurements {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.axis-export-actions button {
+  text-align: left;
+}
+
+@media (max-width: 1120px) {
+  .axis-calibrate-grid,
+  .axis-calibrate-footer,
+  .axis-stage-head {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-calibrate-rail {
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .axis-measures-home header,
+  .axis-measures-index header,
+  .axis-measures-simple header,
+  .axis-calibrate-topbar {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .axis-measures-home nav,
+  .axis-calibrate-rail {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .axis-capture-instrument {
+    min-height: 30rem;
+  }
+}
+
+/* Axis Calibrate compact instrument */
+
+.axis-calibrate-instrument {
+  background: #050706;
+  color: #f6f8f0;
+  display: grid;
+  font-family: Arial, Helvetica, sans-serif;
+  grid-template-rows: 3.5rem minmax(0, 1fr);
+  height: 100dvh;
+  overflow: hidden;
+  width: 100%;
+}
+
+.axis-calibrate-instrument *,
+.axis-calibrate-instrument *::before,
+.axis-calibrate-instrument *::after {
+  box-sizing: border-box;
+}
+
+.axis-calibrate-instrument button,
+.axis-calibrate-instrument select {
+  font: inherit;
+}
+
+.axis-calibrate-instrument-topbar {
+  align-items: center;
+  border-bottom: 1px solid rgba(246, 248, 240, 0.14);
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 9.5rem minmax(8rem, 0.7fr) minmax(12rem, 1fr) 5.5rem 4.75rem;
+  min-height: 0;
+  padding: 0.45rem 0.75rem;
+}
+
+.axis-calibrate-instrument-topbar > strong,
+.axis-mode-rail button,
+.axis-compact-select span,
+.axis-confidence-pill,
+.axis-calibrate-instrument-topbar > button,
+.axis-test-strip,
+.axis-capture-command-row button,
+.axis-compact-reps,
+.axis-compressed-panel h2,
+.axis-proof-strip span,
+.axis-proof-strip button {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.axis-calibrate-instrument-topbar > strong {
+  color: #9dff45;
+  font-size: 0.95rem;
+}
+
+.axis-compact-select {
+  align-items: center;
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.axis-compact-select span {
+  color: rgba(246, 248, 240, 0.48);
+  font-size: 0.58rem;
+}
+
+.axis-compact-select select {
+  background: #080a08;
+  border: 1px solid rgba(246, 248, 240, 0.16);
+  border-radius: 0;
+  color: #f6f8f0;
+  min-height: 2rem;
+  min-width: 0;
+  padding: 0 0.45rem;
+}
+
+.axis-confidence-pill,
+.axis-calibrate-instrument-topbar > button,
+.axis-capture-command-row button,
+.axis-proof-strip button {
+  align-items: center;
+  background: rgba(246, 248, 240, 0.05);
+  border: 1px solid rgba(246, 248, 240, 0.16);
+  color: #f6f8f0;
+  display: inline-flex;
+  font-size: 0.64rem;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0 0.6rem;
+}
+
+.axis-confidence-pill {
+  color: #9dff45;
+}
+
+.axis-calibrate-instrument-topbar > button,
+.axis-capture-command-row button:first-child,
+.axis-proof-strip button {
+  background: #9dff45;
+  border-color: #9dff45;
+  color: #050706;
+}
+
+.axis-calibrate-workbench {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 6.75rem minmax(0, 1fr) 18rem;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.6rem;
+}
+
+.axis-mode-rail,
+.axis-calibrate-capture,
+.axis-measurement-rail {
+  min-height: 0;
+  min-width: 0;
+}
+
+.axis-mode-rail {
+  border: 1px solid rgba(246, 248, 240, 0.12);
+  display: grid;
+  gap: 0;
+  grid-auto-rows: 1fr;
+}
+
+.axis-mode-rail button {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(246, 248, 240, 0.1);
+  color: rgba(246, 248, 240, 0.62);
+  cursor: pointer;
+  font-size: 0.68rem;
+  min-height: 0;
+  padding: 0.35rem;
+}
+
+.axis-mode-rail button:last-child {
+  border-bottom: 0;
+}
+
+.axis-mode-rail button[data-active="true"] {
+  background: rgba(157, 255, 69, 0.1);
+  color: #9dff45;
+}
+
+.axis-calibrate-capture {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-rows: 2.4rem minmax(0, 1fr) 2.35rem 2.2rem;
+}
+
+.axis-test-strip {
+  align-items: center;
+  border: 1px solid rgba(246, 248, 240, 0.12);
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 0 0.65rem;
+}
+
+.axis-test-strip span,
+.axis-test-strip em {
+  color: rgba(246, 248, 240, 0.5);
+  font-size: 0.62rem;
+  font-style: normal;
+}
+
+.axis-test-strip strong {
+  color: #f6f8f0;
+  font-size: 0.98rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-compact-frame {
+  border: 1px solid rgba(157, 255, 69, 0.28);
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-compact-frame .axis-capture-frame {
+  grid-template-rows: 2.1rem minmax(0, 1fr) 2.35rem;
+}
+
+.axis-compact-frame .axis-capture-mode-tabs,
+.axis-compact-frame .axis-capture-controls {
+  background: rgba(5, 7, 6, 0.82);
+  gap: 0.35rem;
+  padding: 0.3rem;
+  position: relative;
+  z-index: 6;
+}
+
+.axis-compact-frame .axis-tab,
+.axis-compact-frame .axis-btn {
+  font-size: 0.6rem;
+  min-height: 1.65rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.axis-compact-frame .axis-capture-viewport {
+  min-height: 0;
+}
+
+.axis-compact-frame .axis-capture-idle {
+  font-size: 0.78rem;
+}
+
+.axis-compact-skeleton {
+  inset: 2.25rem 0 2.35rem;
+  pointer-events: none;
+  position: absolute;
+  z-index: 5;
+}
+
+.axis-compact-skeleton i {
+  background: rgba(157, 255, 69, 0.78);
+  display: block;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform-origin: center;
+}
+
+.axis-compact-skeleton__head {
+  border-radius: 999px;
+  height: 1rem;
+  margin-left: -0.5rem;
+  margin-top: -6.6rem;
+  width: 1rem;
+}
+
+.axis-compact-skeleton__trunk {
+  height: 6rem;
+  margin-left: -1px;
+  margin-top: -5.7rem;
+  width: 2px;
+}
+
+.axis-compact-skeleton__arm,
+.axis-compact-skeleton__leg {
+  height: 4.8rem;
+  width: 2px;
+}
+
+.axis-compact-skeleton__arm--left {
+  margin-top: -4.8rem;
+  transform: rotate(34deg);
+}
+
+.axis-compact-skeleton__arm--right {
+  margin-top: -4.8rem;
+  transform: rotate(-34deg);
+}
+
+.axis-compact-skeleton__leg--left {
+  margin-top: 0.2rem;
+  transform: rotate(14deg);
+}
+
+.axis-compact-skeleton__leg--right {
+  margin-top: 0.2rem;
+  transform: rotate(-14deg);
+}
+
+.axis-compact-skeleton span,
+.axis-compact-floor-line {
+  color: rgba(157, 255, 69, 0.75);
+  font-size: 0.58rem;
+  font-weight: 900;
+  position: absolute;
+  text-transform: uppercase;
+}
+
+.axis-compact-skeleton span {
+  left: 0.6rem;
+  top: 0.5rem;
+}
+
+.axis-compact-floor-line {
+  border-top: 2px solid rgba(157, 255, 69, 0.7);
+  bottom: 3.2rem;
+  left: 8%;
+  padding-top: 0.25rem;
+  right: 8%;
+  z-index: 5;
+}
+
+.axis-capture-command-row {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: 1fr 1fr 0.7fr;
+}
+
+.axis-capture-command-row button:disabled {
+  color: rgba(246, 248, 240, 0.3);
+  cursor: not-allowed;
+}
+
+.axis-compact-reps {
+  align-items: center;
+  border: 1px solid rgba(246, 248, 240, 0.12);
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0.3rem 0.5rem;
+}
+
+.axis-compact-reps > span {
+  color: rgba(246, 248, 240, 0.5);
+  font-size: 0.62rem;
+}
+
+.axis-compact-reps div {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.axis-compact-reps em {
+  color: rgba(246, 248, 240, 0.46);
+  font-size: 0.7rem;
+  font-style: normal;
+}
+
+.axis-compact-reps button {
+  background: rgba(246, 248, 240, 0.05);
+  border: 1px solid rgba(246, 248, 240, 0.16);
+  color: #f6f8f0;
+  flex: 0 0 auto;
+  height: 1.45rem;
+  min-width: 2rem;
+}
+
+.axis-compact-reps button[data-active="true"] {
+  border-color: #9dff45;
+  color: #9dff45;
+}
+
+.axis-measurement-rail {
+  border: 1px solid rgba(246, 248, 240, 0.12);
+  display: grid;
+  gap: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.axis-compressed-panel,
+.axis-proof-strip {
+  border-bottom: 1px solid rgba(246, 248, 240, 0.1);
+  display: grid;
+  gap: 0.45rem;
+  min-height: 0;
+  padding: 0.55rem;
+}
+
+.axis-compressed-panel--grow {
+  overflow: hidden;
+}
+
+.axis-compressed-panel h2 {
+  color: rgba(246, 248, 240, 0.48);
+  font-size: 0.58rem;
+  margin: 0.15rem 0 0;
+}
+
+.axis-landmark-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.axis-landmark-chips span {
+  border: 1px solid rgba(157, 255, 69, 0.35);
+  color: #f6f8f0;
+  font-size: 0.66rem;
+  line-height: 1;
+  padding: 0.28rem 0.35rem;
+}
+
+.axis-landmark-chips--muted span {
+  border-color: rgba(246, 248, 240, 0.14);
+  color: rgba(246, 248, 240, 0.58);
+}
+
+.axis-confidence-readout,
+.axis-live-measurements div,
+.axis-baseline-list div {
+  align-items: center;
+  border-bottom: 1px solid rgba(246, 248, 240, 0.08);
+  display: flex;
+  gap: 0.55rem;
+  justify-content: space-between;
+  min-height: 1.65rem;
+}
+
+.axis-confidence-readout strong,
+.axis-live-measurements strong,
+.axis-baseline-list strong {
+  color: #9dff45;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.axis-confidence-readout span,
+.axis-live-measurements span,
+.axis-baseline-list span {
+  color: rgba(246, 248, 240, 0.62);
+  font-size: 0.66rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-live-measurements,
+.axis-baseline-list {
+  display: grid;
+  gap: 0;
+}
+
+.axis-proof-strip {
+  border-bottom: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.axis-proof-strip div {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.axis-proof-strip div:nth-child(2) {
+  display: none;
+}
+
+.axis-proof-strip span,
+.axis-proof-strip em {
+  color: rgba(246, 248, 240, 0.5);
+  font-size: 0.58rem;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-proof-strip strong {
+  color: #f6f8f0;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .axis-calibrate-instrument {
+    overflow: auto;
+  }
+
+  .axis-calibrate-workbench,
+  .axis-calibrate-instrument-topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .axis-calibrate-workbench {
+    overflow: visible;
+  }
+
+  .axis-mode-rail {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 2.4rem;
+  }
+}
+
+/* Axis Calibrate camera-first measurement */
+
+.axis-camera-calibrate {
+  background: #f3f5f0;
+  color: #101510;
+  display: grid;
+  font-family: Arial, Helvetica, sans-serif;
+  grid-template-rows: 3.75rem minmax(0, 1fr);
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.axis-camera-calibrate *,
+.axis-camera-calibrate *::before,
+.axis-camera-calibrate *::after {
+  box-sizing: border-box;
+}
+
+.axis-camera-calibrate button,
+.axis-camera-calibrate select {
+  font: inherit;
+}
+
+.axis-camera-topbar {
+  align-items: center;
+  background: rgba(243, 245, 240, 0.94);
+  border-bottom: 1px solid rgba(16, 21, 16, 0.12);
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: 5.5rem minmax(8rem, 0.65fr) minmax(10rem, 1fr) 5.75rem;
+  padding: 0.48rem 0.75rem;
+  position: relative;
+  z-index: 5;
+}
+
+.axis-camera-topbar > strong,
+.axis-camera-select span,
+.axis-camera-confidence,
+.axis-camera-save-state,
+.axis-camera-topbar button,
+.axis-camera-test-strip button,
+.axis-camera-readout,
+.axis-camera-readout button,
+.axis-camera-test-popover button,
+.axis-camera-measurement-chips,
+.axis-camera-detection-chips,
+.axis-rim-actions button,
+.axis-camera-controls button,
+.axis-camera-upload,
+.axis-camera-moment-panel,
+.axis-camera-measurements summary,
+.axis-camera-landmarks span,
+.axis-camera-landmarks i,
+.axis-camera-measurements dt,
+.axis-camera-measurements dd,
+.axis-camera-measurements li,
+.axis-camera-baseline,
+.axis-camera-reps,
+.axis-camera-proof {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.axis-camera-topbar > strong {
+  color: #0f6f35;
+  font-size: 1rem;
+}
+
+.axis-camera-select {
+  align-items: center;
+  display: grid;
+  gap: 0.38rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.axis-camera-select span {
+  color: rgba(16, 21, 16, 0.52);
+  font-size: 0.6rem;
+}
+
+.axis-camera-select select {
+  appearance: none;
+  background: #fff;
+  border: 1px solid rgba(16, 21, 16, 0.14);
+  border-radius: 999px;
+  color: #101510;
+  min-height: 2.1rem;
+  min-width: 0;
+  padding: 0 0.8rem;
+}
+
+.axis-camera-confidence,
+.axis-camera-save-state,
+.axis-camera-topbar button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid rgba(16, 21, 16, 0.14);
+  border-radius: 999px;
+  color: #101510;
+  display: inline-flex;
+  font-size: 0.68rem;
+  justify-content: center;
+  min-height: 2.1rem;
+  padding: 0 0.65rem;
+}
+
+.axis-camera-confidence {
+  color: #0f6f35;
+}
+
+.axis-camera-save-state {
+  color: rgba(16, 21, 16, 0.62);
+}
+
+.axis-camera-topbar button {
+  background: #101510;
+  border-color: #101510;
+  color: #fff;
+  cursor: pointer;
+}
+
+.axis-camera-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0.65rem;
+  position: relative;
+}
+
+.axis-camera-test-strip {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: auto hidden;
+  padding-bottom: 0.35rem;
+  scrollbar-width: none;
+}
+
+.axis-camera-test-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.axis-camera-test-strip button {
+  background: #fff;
+  border: 1px solid rgba(16, 21, 16, 0.12);
+  border-radius: 999px;
+  color: rgba(16, 21, 16, 0.62);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  min-height: 1.8rem;
+  padding: 0 0.72rem;
+}
+
+.axis-camera-test-strip button[data-active="true"] {
+  background: #dff6cf;
+  border-color: rgba(15, 111, 53, 0.3);
+  color: #0f6f35;
+}
+
+.axis-camera-stage {
+  background: #101510;
+  border: 1px solid rgba(16, 21, 16, 0.18);
+  border-radius: 26px;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-camera-video,
+.axis-camera-overlay {
+  display: block;
+  height: 100%;
+  inset: 0;
+  position: absolute;
+  width: 100%;
+}
+
+.axis-camera-video {
+  background: #151a15;
+  object-fit: cover;
+}
+
+.axis-camera-overlay {
+  pointer-events: none;
+  z-index: 2;
+}
+
+.axis-camera-readout {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(16, 21, 16, 0.12);
+  border-radius: 999px;
+  display: flex;
+  gap: 0.7rem;
+  left: 0.85rem;
+  max-width: calc(100% - 1.7rem);
+  padding: 0.42rem 0.65rem;
+  position: absolute;
+  top: 0.85rem;
+  z-index: 3;
+}
+
+.axis-camera-readout span {
+  color: rgba(16, 21, 16, 0.54);
+  font-size: 0.62rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-camera-readout strong {
+  color: #0f6f35;
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+}
+
+.axis-camera-readout button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: #101510;
+  cursor: pointer;
+  font-size: 0.62rem;
+  max-width: min(19rem, 58vw);
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-camera-test-popover {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(16, 21, 16, 0.12);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.25rem;
+  left: 0.85rem;
+  max-height: min(46dvh, 20rem);
+  overflow: auto;
+  padding: 0.4rem;
+  position: absolute;
+  top: 3.45rem;
+  width: min(22rem, calc(100% - 1.7rem));
+  z-index: 7;
+}
+
+.axis-camera-test-popover button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: rgba(16, 21, 16, 0.72);
+  cursor: pointer;
+  font-size: 0.64rem;
+  min-height: 2rem;
+  padding: 0 0.65rem;
+  text-align: left;
+}
+
+.axis-camera-test-popover button:hover {
+  background: #dff6cf;
+  color: #0f6f35;
+}
+
+.axis-camera-measurement-chips {
+  align-items: center;
+  bottom: 4.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+  left: 0.85rem;
+  max-width: min(42rem, calc(100% - 1.7rem));
+  position: absolute;
+  z-index: 4;
+}
+
+.axis-camera-measurement-chips span {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(16, 21, 16, 0.12);
+  border-radius: 999px;
+  color: rgba(16, 21, 16, 0.58);
+  display: inline-flex;
+  font-size: 0.62rem;
+  gap: 0.38rem;
+  min-height: 2rem;
+  padding: 0.45rem 0.62rem;
+}
+
+.axis-camera-measurement-chips strong {
+  color: #0f6f35;
+  white-space: nowrap;
+}
+
+.axis-camera-detection-chips {
+  align-items: center;
+  display: flex;
+  gap: 0.42rem;
+  left: 0.85rem;
+  position: absolute;
+  top: 3.75rem;
+  z-index: 4;
+}
+
+.axis-camera-detection-chips span,
+.axis-camera-detection-chips button {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.84);
+    border: 1px solid rgba(16, 21, 16, 0.12);
+    border-radius: 999px;
+    color: rgba(16, 21, 16, 0.48);
+    cursor: pointer;
+    font-size: 0.62rem;
+    padding: 0.45rem 0.64rem;
+  }
+  
+.axis-camera-detection-chips span[data-active="true"],
+.axis-camera-detection-chips button[data-active="true"] {
+    background: rgba(157, 255, 69, 0.9);
+    border-color: rgba(157, 255, 69, 0.9);
+    color: #101510;
+  }
+
+  .axis-rim-calibration-layer {
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: 3;
+  }
+
+  .axis-rim-calibration-layer[data-active="true"] {
+    cursor: crosshair;
+    pointer-events: auto;
+  }
+
+  .axis-rim-instruction {
+    background: rgba(16, 21, 16, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 999px;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 0.64rem;
+    left: 50%;
+    max-width: min(28rem, calc(100% - 1.6rem));
+    padding: 0.46rem 0.72rem;
+    position: absolute;
+    text-align: center;
+    top: 0.85rem;
+    transform: translateX(-50%);
+  }
+
+  .axis-rim-box {
+    border: 2px solid #9dff45;
+    box-shadow: 0 0 0 999px rgba(16, 21, 16, 0.08), 0 0 22px rgba(157, 255, 69, 0.34);
+    position: absolute;
+  }
+
+  .axis-rim-box span {
+    background: #9dff45;
+    color: #101510;
+    font-size: 0.58rem;
+    font-weight: 900;
+    left: 0;
+    padding: 0.22rem 0.38rem;
+    position: absolute;
+    top: 0;
+  }
+
+  .axis-rim-actions {
+    bottom: 4rem;
+    display: flex;
+    gap: 0.42rem;
+    left: 50%;
+    position: absolute;
+    transform: translateX(-50%);
+  }
+
+  .axis-rim-actions button {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(16, 21, 16, 0.12);
+    border-radius: 999px;
+    color: #101510;
+    cursor: pointer;
+    font-size: 0.62rem;
+    min-height: 2rem;
+    padding: 0 0.72rem;
+  }
+
+  .axis-rim-actions button:last-child {
+    background: #9dff45;
+    border-color: #9dff45;
+  }
+
+  .axis-rim-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+.axis-camera-empty {
+  align-content: center;
+  color: #fff;
+  display: grid;
+  gap: 0.55rem;
+  inset: 0;
+  justify-items: center;
+  padding: 1rem;
+  position: absolute;
+  text-align: center;
+  z-index: 1;
+}
+
+.axis-camera-empty strong {
+  font-size: clamp(1.4rem, 5vw, 3rem);
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+.axis-camera-empty span {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 0.88rem;
+}
+
+.axis-camera-controls {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(16, 21, 16, 0.12);
+  border-radius: 999px;
+  bottom: 1rem;
+  display: flex;
+  gap: 0.42rem;
+  left: 50%;
+  padding: 0.38rem;
+  position: absolute;
+  transform: translateX(-50%);
+  z-index: 4;
+}
+
+.axis-camera-controls button,
+.axis-camera-upload {
+  align-items: center;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.66rem;
+  justify-content: center;
+  min-height: 2.3rem;
+  padding: 0 0.85rem;
+  white-space: nowrap;
+}
+
+.axis-camera-controls button {
+  background: #f3f5f0;
+  border: 1px solid rgba(16, 21, 16, 0.1);
+  color: #101510;
+}
+
+.axis-camera-controls button:disabled {
+  color: rgba(16, 21, 16, 0.34);
+  cursor: not-allowed;
+}
+
+.axis-camera-controls .axis-camera-capture {
+  background: #0f6f35;
+  border-color: #0f6f35;
+  color: #fff;
+  min-width: 5.6rem;
+}
+
+.axis-camera-upload {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(16, 21, 16, 0.12);
+  bottom: 1.15rem;
+  color: rgba(16, 21, 16, 0.58);
+  max-width: 12rem;
+  overflow: hidden;
+  position: absolute;
+  right: 1rem;
+  text-overflow: ellipsis;
+  z-index: 4;
+}
+
+.axis-camera-upload input {
+  clip: rect(0 0 0 0);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.axis-camera-measurements {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(16, 21, 16, 0.12);
+  border-radius: 999px;
+  max-height: min(62dvh, 34rem);
+  overflow: hidden;
+  position: absolute;
+  right: 0.9rem;
+  top: 0.9rem;
+  width: auto;
+  z-index: 4;
+}
+
+.axis-camera-measurements[open] {
+  border-radius: 18px;
+  width: min(19rem, calc(100vw - 2.2rem));
+}
+
+.axis-camera-measurements summary {
+  cursor: pointer;
+  font-size: 0.68rem;
+  list-style: none;
+  padding: 0.55rem 0.8rem;
+}
+
+.axis-camera-measurements summary::-webkit-details-marker {
+  display: none;
+}
+
+.axis-camera-measurements > div {
+  border-top: 1px solid rgba(16, 21, 16, 0.1);
+  display: grid;
+  gap: 0.65rem;
+  max-height: calc(min(62dvh, 34rem) - 2.4rem);
+  overflow: auto;
+  padding: 0.75rem 0.85rem 0.85rem;
+}
+
+.axis-camera-landmarks {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.axis-camera-landmarks span,
+.axis-camera-measurements dt {
+  color: rgba(16, 21, 16, 0.5);
+  font-size: 0.58rem;
+}
+
+.axis-camera-landmarks div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.26rem;
+}
+
+.axis-camera-landmarks i {
+  border: 1px solid rgba(15, 111, 53, 0.22);
+  border-radius: 999px;
+  color: #101510;
+  font-size: 0.58rem;
+  font-style: normal;
+  padding: 0.22rem 0.38rem;
+}
+
+.axis-camera-measurements dl,
+.axis-camera-measurements ul {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.axis-camera-measurements dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.axis-camera-measurements dl div,
+.axis-camera-measurements li,
+.axis-camera-baseline {
+  align-items: center;
+  border-top: 1px solid rgba(16, 21, 16, 0.08);
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  min-height: 2rem;
+}
+
+.axis-camera-measurements dd {
+  color: #0f6f35;
+  font-size: 0.62rem;
+  margin: 0;
+}
+
+.axis-camera-measurements ul {
+  list-style: none;
+}
+
+.axis-camera-measurements li span,
+.axis-camera-baseline span {
+  color: rgba(16, 21, 16, 0.62);
+  font-size: 0.64rem;
+}
+
+.axis-camera-measurements li strong,
+.axis-camera-baseline strong {
+  color: #0f6f35;
+  font-size: 0.68rem;
+}
+
+.axis-camera-reps {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 0;
+  padding-top: 0.45rem;
+}
+
+.axis-camera-reps span {
+  color: rgba(16, 21, 16, 0.52);
+  font-size: 0.62rem;
+}
+
+.axis-camera-reps div {
+  align-items: center;
+  display: flex;
+  gap: 0.25rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.axis-camera-reps i {
+  background: rgba(16, 21, 16, 0.16);
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 0.58rem;
+  font-style: normal;
+  height: 0.55rem;
+  justify-content: center;
+  min-width: 2.2rem;
+}
+
+.axis-camera-reps i[data-measured="true"] {
+  background: #0f6f35;
+}
+
+.axis-camera-moment-panel {
+  align-items: center;
+  background: #101510;
+  border: 1px solid rgba(16, 21, 16, 0.18);
+  border-radius: 20px;
+  color: #fff;
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 18rem) auto;
+  margin-top: 0.55rem;
+  min-height: 4.5rem;
+  padding: 0.7rem;
+}
+
+.axis-camera-moment-panel > div:first-child {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.axis-camera-moment-panel span,
+.axis-camera-moment-panel em {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 0.58rem;
+  font-style: normal;
+}
+
+.axis-camera-moment-panel strong {
+  color: #fff;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-camera-moment-panel p {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.76rem;
+  line-height: 1.2;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-camera-moment-panel input {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: #fff;
+  min-height: 2.4rem;
+  min-width: 0;
+  padding: 0 0.85rem;
+}
+
+.axis-camera-moment-panel > div:last-child {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.axis-camera-moment-panel button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.64rem;
+  min-height: 2.35rem;
+  padding: 0 0.72rem;
+}
+
+.axis-camera-moment-panel button:last-child {
+  background: #9dff45;
+  border-color: #9dff45;
+  color: #101510;
+}
+
+.axis-camera-moment-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.axis-camera-proof {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(16, 21, 16, 0.12);
+  border-radius: 999px;
+  bottom: 3.95rem;
+  display: grid;
+  gap: 0.25rem 0.7rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 0.52rem 0.55rem 0.52rem 0.85rem;
+  position: absolute;
+  right: 1rem;
+  z-index: 4;
+}
+
+.axis-camera-proof span {
+  color: rgba(16, 21, 16, 0.48);
+  font-size: 0.56rem;
+  grid-column: 1 / 2;
+}
+
+.axis-camera-proof strong {
+  color: #101510;
+  font-size: 0.66rem;
+  grid-column: 1 / 2;
+}
+
+.axis-camera-proof em {
+  color: rgba(16, 21, 16, 0.58);
+  font-size: 0.62rem;
+  font-style: normal;
+  grid-column: 2 / 3;
+  grid-row: 1 / 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-camera-proof button {
+  background: #101510;
+  border: 1px solid #101510;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.64rem;
+  grid-column: 3 / 4;
+  grid-row: 1 / 3;
+  min-height: 2.1rem;
+  padding: 0 0.85rem;
+  text-transform: uppercase;
+}
+
+.axis-camera-calibrate {
+  background: #030504;
+  color: #f8f5ee;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.axis-camera-topbar--instrument {
+  background: rgba(3, 5, 4, 0.96);
+  border-bottom: 1px solid rgba(248, 245, 238, 0.1);
+  display: flex;
+  justify-content: space-between;
+  min-height: 4.25rem;
+  padding: 0.72rem 0.9rem;
+}
+
+.axis-camera-topbar--instrument > div {
+  display: grid;
+  gap: 0.24rem;
+  min-width: 0;
+}
+
+.axis-camera-topbar--instrument > div:last-child {
+  justify-items: end;
+}
+
+.axis-camera-topbar--instrument strong {
+  color: #f8f5ee;
+  font-size: 0.86rem;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-camera-topbar--instrument > div:first-child strong {
+  color: #9dff45;
+  font-size: 1rem;
+}
+
+.axis-camera-topbar--instrument span {
+  color: rgba(248, 245, 238, 0.58);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.axis-camera-workspace {
+  background: #030504;
+  padding: 0;
+}
+
+.axis-camera-stage {
+  background: #050706;
+  border: 0;
+  border-radius: 0;
+}
+
+.axis-camera-stage::after {
+  background: linear-gradient(180deg, rgba(3, 5, 4, 0.22), transparent 28%, transparent 58%, rgba(3, 5, 4, 0.78));
+  content: "";
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.axis-camera-readout {
+  background: rgba(3, 5, 4, 0.68);
+  border: 1px solid rgba(248, 245, 238, 0.1);
+  color: #f8f5ee;
+  top: 0.75rem;
+  z-index: 4;
+}
+
+.axis-camera-readout span {
+  color: rgba(248, 245, 238, 0.58);
+}
+
+.axis-camera-readout strong {
+  color: #9dff45;
+}
+
+.axis-camera-detection-chips {
+  top: 3.55rem;
+  z-index: 4;
+}
+
+.axis-camera-detection-chips span {
+  background: rgba(3, 5, 4, 0.64);
+  border-color: rgba(248, 245, 238, 0.1);
+  color: rgba(248, 245, 238, 0.5);
+  cursor: default;
+}
+
+.axis-camera-detection-chips span[data-active="true"] {
+  background: rgba(157, 255, 69, 0.92);
+  border-color: rgba(157, 255, 69, 0.92);
+  color: #030504;
+}
+
+.axis-camera-query-result {
+  background: rgba(3, 5, 4, 0.78);
+  border: 1px solid rgba(248, 245, 238, 0.1);
+  border-radius: 12px;
+  bottom: 6.85rem;
+  color: rgba(248, 245, 238, 0.9);
+  font-size: 0.82rem;
+  left: 0.85rem;
+  line-height: 1.35;
+  padding: 0.85rem 0.95rem;
+  position: absolute;
+  right: 0.85rem;
+  z-index: 5;
+}
+
+.axis-camera-query-dock {
+  background: rgba(3, 5, 4, 0.86);
+  border: 1px solid rgba(248, 245, 238, 0.12);
+  border-radius: 18px;
+  bottom: 0.85rem;
+  display: grid;
+  gap: 0.62rem;
+  left: 0.85rem;
+  padding: 0.7rem;
+  position: absolute;
+  right: 0.85rem;
+  z-index: 5;
+}
+
+.axis-camera-query-input {
+  align-items: center;
+  display: grid;
+  gap: 0.48rem;
+  grid-template-columns: minmax(0, 1fr) 2.35rem;
+}
+
+.axis-camera-query-input input {
+  background: transparent;
+  border: 0;
+  color: #f8f5ee;
+  font-size: 1rem;
+  min-height: 2.4rem;
+  min-width: 0;
+  outline: 0;
+}
+
+.axis-camera-query-input input::placeholder {
+  color: rgba(248, 245, 238, 0.48);
+}
+
+.axis-camera-query-input button,
+.axis-camera-query-status button,
+.axis-camera-empty button {
+  background: rgba(248, 245, 238, 0.08);
+  border: 1px solid rgba(248, 245, 238, 0.14);
+  border-radius: 999px;
+  color: #f8f5ee;
+  cursor: pointer;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 900;
+  min-height: 2.25rem;
+}
+
+.axis-camera-query-input button {
+  color: #9dff45;
+}
+
+.axis-camera-query-status {
+  align-items: center;
+  display: flex;
+  gap: 0.48rem;
+  min-width: 0;
+}
+
+.axis-camera-query-status span,
+.axis-camera-query-status button {
+  align-items: center;
+  display: inline-flex;
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.68rem;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 1.85rem;
+  padding: 0 0.66rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.axis-camera-query-status span {
+  background: rgba(248, 245, 238, 0.07);
+  border: 1px solid rgba(248, 245, 238, 0.1);
+  border-radius: 999px;
+  color: rgba(248, 245, 238, 0.52);
+}
+
+.axis-camera-query-status span[data-active="true"] {
+  color: #9dff45;
+}
+
+.axis-camera-query-status button {
+  margin-left: auto;
+}
+
+.axis-camera-query-status button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.axis-camera-empty {
+  background: rgba(3, 5, 4, 0.72);
+  z-index: 3;
+}
+
+.axis-camera-empty .axis-camera-upload {
+  background: rgba(248, 245, 238, 0.08);
+  border-color: rgba(248, 245, 238, 0.14);
+  bottom: auto;
+  color: rgba(248, 245, 238, 0.7);
+  max-width: min(16rem, calc(100vw - 2rem));
+  position: relative;
+  right: auto;
+}
+
+@media (max-width: 780px) {
+  .axis-camera-calibrate {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .axis-camera-topbar {
+    gap: 0.45rem;
+    grid-template-columns: 4rem minmax(0, 1fr) auto;
+    padding: 0.55rem;
+  }
+
+  .axis-camera-select--test {
+    grid-column: 1 / -1;
+  }
+
+  .axis-camera-confidence {
+    display: none;
+  }
+
+  .axis-camera-workspace {
+    grid-template-rows: minmax(0, 1fr) auto;
+    padding: 0.5rem;
+  }
+
+  .axis-camera-stage {
+    border-radius: 20px;
+  }
+
+  .axis-camera-measurements {
+    max-height: 43dvh;
+    right: 0.75rem;
+    top: 0.75rem;
+  }
+
+  .axis-camera-measurements[open] {
+    width: min(17rem, calc(100vw - 1.5rem));
+  }
+
+  .axis-camera-measurement-chips {
+    bottom: 4.05rem;
+    left: 0.75rem;
+    max-width: calc(100vw - 1.5rem);
+  }
+
+  .axis-camera-upload {
+    display: none;
+  }
+
+  .axis-camera-controls {
+    bottom: 0.75rem;
+    max-width: calc(100vw - 1.5rem);
+  }
+
+  .axis-camera-detection-chips {
+    left: 0.75rem;
+    top: 3.55rem;
+  }
+
+  .axis-camera-moment-panel {
+    gap: 0.45rem;
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .axis-camera-moment-panel > div:last-child {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 780px) {
+  .axis-camera-topbar--instrument {
+    min-height: 4rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .axis-camera-workspace {
+    padding: 0;
+  }
+
+  .axis-camera-stage {
+    border-radius: 0;
+  }
+
+  .axis-camera-query-result {
+    bottom: 6.55rem;
+    left: 0.65rem;
+    right: 0.65rem;
+  }
+
+  .axis-camera-query-dock {
+    border-radius: 16px;
+    bottom: 0.65rem;
+    left: 0.65rem;
+    padding: 0.62rem;
+    right: 0.65rem;
+  }
+
+  .axis-camera-query-input input {
+    font-size: 0.96rem;
+  }
+
+  .axis-camera-empty .axis-camera-upload {
+    display: inline-flex;
+  }
+}
+
+/* Axis single-loop session camera and lab registry */
+
+.axis-session-camera__stage {
+  background: #101510;
+  border-radius: 1.4rem;
+  min-height: min(76vh, calc(100dvh - 12rem));
+  overflow: hidden;
+  position: relative;
+}
+
+.axis-session-camera__stage video,
+.axis-session-camera__stage canvas {
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.axis-session-camera__stage canvas {
+  pointer-events: none;
+  z-index: 2;
+}
+
+.axis-session-camera__empty {
+  align-content: center;
+  background: #101510;
+  color: #fff;
+  display: grid;
+  gap: 0.35rem;
+  inset: 0;
+  justify-items: center;
+  padding: 1rem;
+  position: absolute;
+  text-align: center;
+  z-index: 3;
+}
+
+.axis-session-camera__empty strong,
+.axis-session-camera__upload,
+.axis-session-camera__upload-name,
+.axis-lab-registry header p,
+.axis-lab-registry article span,
+.axis-lab-registry article strong,
+.axis-lab-registry article em {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.axis-session-camera__empty span {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 0.82rem;
+}
+
+.axis-session-camera__upload,
+.axis-session-camera__upload-name {
+  background: rgba(248, 245, 238, 0.1);
+  border: 1px solid rgba(248, 245, 238, 0.16);
+  border-radius: 999px;
+  color: #f8f5ee;
+  cursor: pointer;
+  font-size: 0.68rem;
+  min-height: 2.3rem;
+  padding: 0.62rem 0.8rem;
+}
+
+.axis-session-camera__upload input {
+  display: none;
+}
+
+.axis-session-camera__upload-name {
+  bottom: 4.15rem;
+  left: 0.65rem;
+  max-width: calc(100% - 1.3rem);
+  overflow: hidden;
+  position: absolute;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 4;
+}
+
+.axis-query-toolbar {
+  align-items: center;
+  background: rgba(6, 8, 7, 0.82);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(248, 245, 238, 0.14);
+  border-radius: 999px;
+  bottom: 0.55rem;
+  display: grid;
+  gap: 0.38rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  left: 0.55rem;
+  padding: 0.38rem;
+  position: absolute;
+  right: 0.55rem;
+  z-index: 5;
+}
+
+.axis-query-toolbar__input-wrap {
+  align-items: center;
+  background: rgba(248, 245, 238, 0.08);
+  border: 1px solid rgba(248, 245, 238, 0.12);
+  border-radius: 999px;
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  position: relative;
+}
+
+.axis-query-toolbar__toast {
+  background: rgba(157, 255, 69, 0.94);
+  border-radius: 999px;
+  bottom: calc(100% + 0.5rem);
+  color: #101510;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 650;
+  left: 50%;
+  padding: 0.35rem 0.8rem;
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.axis-query-toolbar input {
+  background: transparent;
+  border: 0;
+  color: #f8f5ee;
+  font: inherit;
+  font-size: 0.86rem;
+  min-height: 2.35rem;
+  min-width: 0;
+  outline: none;
+  padding: 0 0.2rem 0 0.72rem;
+}
+
+.axis-query-toolbar input::placeholder {
+  color: rgba(248, 245, 238, 0.48);
+}
+
+.axis-query-toolbar button {
+  background: rgba(248, 245, 238, 0.1);
+  border: 1px solid rgba(248, 245, 238, 0.14);
+  border-radius: 999px;
+  color: #f8f5ee;
+  cursor: pointer;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  min-height: 2.35rem;
+  padding: 0 0.72rem;
+  text-transform: none;
+}
+
+.axis-query-toolbar__submit {
+  background: rgba(238, 103, 42, 0.92) !important;
+  border-color: rgba(238, 103, 42, 0.92) !important;
+  color: #120704 !important;
+  margin-right: 0.16rem;
+  min-height: 2rem !important;
+  padding: 0 0.55rem !important;
+}
+
+.axis-query-toolbar button:disabled,
+.axis-query-toolbar input:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.axis-lab-registry {
+  background: #f4f5ef;
+  color: #101510;
+  display: grid;
+  gap: 1rem;
+  min-height: 100dvh;
+  padding: clamp(1rem, 4vw, 2rem);
+}
+
+.axis-lab-registry header {
+  display: grid;
+  gap: 0.55rem;
+  max-width: 48rem;
+}
+
+.axis-lab-registry header p,
+.axis-lab-registry article span {
+  color: #16783d;
+  font-size: 0.72rem;
+  margin: 0;
+}
+
+.axis-lab-registry header h1 {
+  font-size: clamp(2.8rem, 9vw, 6rem);
+  line-height: 0.9;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.axis-lab-registry header span {
+  color: rgba(16, 21, 16, 0.66);
+}
+
+.axis-lab-registry section {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.axis-lab-registry article {
+  background: #fff;
+  border: 1px solid rgba(16, 21, 16, 0.1);
+  border-radius: 0.85rem;
+  display: grid;
+  gap: 0.42rem;
+  padding: 0.9rem;
+}
+
+.axis-lab-registry article strong {
+  font-size: 1rem;
+}
+
+.axis-lab-registry article p {
+  color: rgba(16, 21, 16, 0.66);
+  font-size: 0.86rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.axis-lab-registry article em {
+  color: rgba(16, 21, 16, 0.5);
+  font-size: 0.66rem;
+  font-style: normal;
+}

@@ -1,5 +1,20 @@
 # Axis Agent Instructions
 
+## Who Axis Is
+
+Axis is a Sports Biomechanics Video Agent.
+
+- Camera = Axis's eyes.
+- MediaPipe / TensorFlow / future APIs = Axis's visual perception.
+- Player box = Axis's visual language.
+- Movement chains (future) = Axis's biomechanics language.
+- Clips (future) = Axis's proof output.
+- Open command toolbar = the user talking back.
+- Evidence = what Axis saves.
+- Memory = what Axis compounds.
+
+Core product model: camera and SDKs are Axis seeing. Visual overlays are Axis speaking. The toolbar is the user talking back. Evidence is what Axis saves. Memory is what Axis compounds.
+
 Axis is a camera-first basketball memory and vision product.
 
 Do not build Axis like a dashboard, SaaS admin panel, generic AI app, or test-selection form.
@@ -33,18 +48,21 @@ Axis remembers.
 
 Axis does not add capabilities by adding screens.
 
-Axis adds capabilities by converting more signals into structured memory.
+Axis adds capabilities by converting more signals into structured evidence and memory.
 
 Every new capability must plug into:
 
 ```text
-Input Source
--> Signal Adapter
--> Capability Run
--> AxisEvidence
--> AxisSessionObject
--> AxisMemoryPage
+Input
+-> Tool / SDK / API
+-> Evidence
+-> Memory
+-> Export / Recall
 ```
+
+This is the same loop referenced elsewhere as `Input Source -> Signal Adapter -> Capability Run -> AxisEvidence -> AxisSessionObject -> AxisMemoryPage`; `Tool / SDK / API` covers the Signal Adapter and Capability Run steps, and `Export / Recall` covers proof export and Ask Axis.
+
+Do not add a screen for a capability. Do not reintroduce old workflow buttons (Mark Moment, Analyze, Last Moment, Correct, Not Right). One capability at a time.
 
 ## Release Discipline
 
