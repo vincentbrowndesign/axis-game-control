@@ -21,8 +21,11 @@
 import {
   loadAxisPoseDetector,
   type AxisPoseDetector,
+  type AxisPoseFrame,
   type AxisPoseLandmark,
 } from "./axis-pose-detector";
+
+export type AxisWitnessStatus = "loading" | "live" | "offline";
 
 export type AxisPoseEventDetail = {
   timestamp: number;
@@ -101,8 +104,9 @@ function vis(l: { visibility?: number }): number {
 export function createAxisWitnessOverlay(opts: {
   video: HTMLVideoElement;
   canvas: HTMLCanvasElement;
+  onStatus?: (status: AxisWitnessStatus) => void;
 }): AxisWitnessOverlay {
-  const { video, canvas } = opts;
+  const { video, canvas, onStatus } = opts;
   const ctx = canvas.getContext("2d");
 
   let running = false;
@@ -111,6 +115,8 @@ export function createAxisWitnessOverlay(opts: {
   let test: string | null = null;
   let athlete: string | null = null;
   let lastTs = -1;
+  let announcedLive = false;
+  let detectErrors = 0;
   const smoothed = new Map<number, Smoothed>();
 
   function angleDeg(
@@ -161,8 +167,6 @@ export function createAxisWitnessOverlay(opts: {
     if (ts <= lastTs) return; // detectForVideo needs monotonic timestamps
     lastTs = ts;
 
-    const result = detector.detect(video, ts);
-
     /* size canvas to its CSS box, map normalized coords through object-fit: cover */
     const dpr = window.devicePixelRatio || 1;
     const cw = canvas.clientWidth;
@@ -174,9 +178,24 @@ export function createAxisWitnessOverlay(opts: {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    let result: AxisPoseFrame | null = null;
+    try {
+      result = detector.detect(video, ts);
+      detectErrors = 0;
+    } catch {
+      detectErrors++;
+      if (detectErrors === 90 && !announcedLive) onStatus?.("offline"); // ~3s of failures
+      return;
+    }
+
     if (!result) {
       smoothed.clear();
       return;
+    }
+
+    if (!announcedLive) {
+      announcedLive = true;
+      onStatus?.("live");
     }
 
     const vw = video.videoWidth;
@@ -290,13 +309,15 @@ export function createAxisWitnessOverlay(opts: {
       if (running) return;
       running = true;
       window.AxisWitness = { setTest: overlay.setTest, setAthlete: overlay.setAthlete };
+      onStatus?.("loading");
       loadAxisPoseDetector()
         .then((d) => {
           if (!running) return;
           detector = d;
         })
         .catch(() => {
-          /* stays dumb: no pose model, no drawing, no error UI */
+          /* stays dumb about geometry, but reports its own health */
+          if (running) onStatus?.("offline");
         });
       raf = requestAnimationFrame(frame);
     },

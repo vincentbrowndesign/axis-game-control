@@ -2,6 +2,12 @@
 
 import { useEffect, useRef } from "react";
 
+import {
+  axisEvidenceFileName,
+  axisExtForMime,
+  exportAxisEvidenceFiles,
+  pickAxisRecorderMimeType,
+} from "../../lib/axis/evidence-export";
 import { createAxisWitnessOverlay, type AxisWitnessOverlay } from "../../lib/axis/witness-overlay";
 
 /* ============================================================
@@ -178,7 +184,6 @@ export default function AxisInstrument() {
       athlete: null as string | null,
       recording: false,
       recStart: 0,
-      evidence: 0,
       stream: null as MediaStream | null,
       recorder: null as MediaRecorder | null,
       chunks: [] as Blob[],
@@ -188,7 +193,6 @@ export default function AxisInstrument() {
     let witness: AxisWitnessOverlay | null = null;
     let thirdTimer: ReturnType<typeof setTimeout> | undefined;
     let swapTimer: ReturnType<typeof setTimeout> | undefined;
-    let saveTimer: ReturnType<typeof setTimeout> | undefined;
     let tickTimer: ReturnType<typeof setTimeout> | undefined;
     let pressTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -201,6 +205,21 @@ export default function AxisInstrument() {
       clearTimeout(thirdTimer);
       thirdTimer = setTimeout(() => t.classList.remove("show"), 1600);
     }
+
+    /* ---------- evidence queue (SAVE exports to camera roll) ---------- */
+    const pendingFiles: File[] = [];
+    const athleteTag = () => (S.athlete ? S.athlete.replace("ATHLETE ", "A") : null);
+    const armedTest = () => (S.ti >= 0 ? TESTS[S.ti] : null);
+    const queueEvidence = (file: File) => {
+      pendingFiles.push(file);
+      root.classList.add("has-evidence");
+      $("#save-btn span").textContent = `SAVE ${pendingFiles.length}`;
+    };
+    const clearEvidence = () => {
+      pendingFiles.length = 0;
+      root.classList.remove("has-evidence");
+      $("#save-btn span").textContent = "SAVE";
+    };
 
     /* ---------- intent registry ---------- */
     const registry: Record<string, (arg?: string | number) => void> = {
@@ -255,9 +274,14 @@ export default function AxisInstrument() {
           c.toBlob(
             (b) => {
               if (!b || disposed) return;
-              S.evidence++;
-              root.classList.add("has-evidence");
-              // >>> AXIS-CORE: POST blob to calibration endpoint (Supabase, upload_id keyed)
+              const name = axisEvidenceFileName({
+                kind: "frame",
+                athlete: athleteTag(),
+                test: armedTest(),
+                ext: "jpg",
+              });
+              queueEvidence(new File([b], name, { type: "image/jpeg" }));
+              // >>> AXIS-CORE: future — also POST to evidence endpoint (Supabase)
             },
             "image/jpeg",
             0.85,
@@ -272,14 +296,25 @@ export default function AxisInstrument() {
       },
 
       save() {
-        flashThird("SAVING…");
-        // >>> AXIS-CORE: persist calibration
-        clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
+        if (pendingFiles.length === 0) return flashThird("NOTHING TO SAVE", true);
+        const count = pendingFiles.length;
+        /* share must run inside this tap's activation — no defer */
+        void exportAxisEvidenceFiles([...pendingFiles]).then((outcome) => {
           if (disposed) return;
-          root.classList.add("calibrated");
-          flashThird("CALIBRATION SAVED");
-        }, 400);
+          if (outcome === "shared") {
+            clearEvidence();
+            root.classList.add("calibrated"); // dot = evidence has flowed off-device
+            flashThird("SAVED TO CAMERA ROLL");
+          } else if (outcome === "downloaded") {
+            clearEvidence();
+            root.classList.add("calibrated");
+            flashThird(`DOWNLOADED · ${count} FILE${count > 1 ? "S" : ""}`);
+          } else if (outcome === "cancelled") {
+            flashThird("SAVE CANCELLED", true);
+          } else {
+            flashThird("SAVE FAILED", true);
+          }
+        });
       },
     };
     const dispatch = (intent: string, arg?: string | number) =>
@@ -314,7 +349,8 @@ export default function AxisInstrument() {
       root.classList.add("recording");
       if (window.MediaRecorder && S.stream) {
         try {
-          S.recorder = new MediaRecorder(S.stream);
+          const mime = pickAxisRecorderMimeType();
+          S.recorder = new MediaRecorder(S.stream, mime ? { mimeType: mime } : undefined);
           S.recorder.ondataavailable = (e) => {
             if (e.data.size) S.chunks.push(e.data);
           };
@@ -329,11 +365,28 @@ export default function AxisInstrument() {
     const stopRep = () => {
       S.recording = false;
       root.classList.remove("recording");
-      if (S.recorder && S.recorder.state !== "inactive") S.recorder.stop();
-      S.evidence++;
-      root.classList.add("has-evidence");
-      flashThird(`REP SAVED · ${Math.round((Date.now() - S.recStart) / 1000)}S`);
-      // >>> AXIS-CORE: hand rep blob to witness pipeline (witness-registry.ts)
+      const secs = Math.round((Date.now() - S.recStart) / 1000);
+      const test = armedTest();
+      if (S.recorder && S.recorder.state !== "inactive") {
+        const rec = S.recorder;
+        rec.onstop = () => {
+          if (disposed || S.chunks.length === 0) return;
+          const type = rec.mimeType || "video/webm";
+          const name = axisEvidenceFileName({
+            kind: "rep",
+            athlete: athleteTag(),
+            test,
+            ext: axisExtForMime(type),
+          });
+          queueEvidence(new File([new Blob(S.chunks, { type })], name, { type }));
+          S.chunks = [];
+        };
+        rec.stop();
+        flashThird(`REP SAVED · ${secs}S`);
+      } else {
+        flashThird("REP NOT RECORDED", true);
+      }
+      // >>> AXIS-CORE: hand rep file to witness pipeline (witness-registry.ts)
     };
     function tick() {
       if (!S.recording || disposed) return;
@@ -376,6 +429,11 @@ export default function AxisInstrument() {
           witness = createAxisWitnessOverlay({
             video: $<HTMLVideoElement>("#cam"),
             canvas: $<HTMLCanvasElement>("#overlay-canvas"),
+            onStatus: (status) => {
+              if (disposed) return;
+              if (status === "live") flashThird("WITNESS LIVE");
+              else if (status === "offline") flashThird("WITNESS OFFLINE", true);
+            },
           });
           witness.start();
           if (S.ti >= 0) witness.setTest(TESTS[S.ti]);
@@ -460,7 +518,6 @@ export default function AxisInstrument() {
       disposed = true;
       clearTimeout(thirdTimer);
       clearTimeout(swapTimer);
-      clearTimeout(saveTimer);
       clearTimeout(tickTimer);
       clearTimeout(pressTimer);
       document.removeEventListener("keydown", onKeydown);
@@ -500,7 +557,7 @@ export default function AxisInstrument() {
           <span id="rec-time">0:00</span>
         </div>
         <button type="button" id="save-btn" data-intent="save">
-          <span>SAVE CAL</span>
+          <span>SAVE</span>
         </button>
       </div>
 

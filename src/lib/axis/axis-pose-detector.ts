@@ -88,39 +88,52 @@ function estimateConfidence(landmarks: AxisPoseLandmark[]) {
   return Math.min(1, visibilityTotal / needed.length);
 }
 
+const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
+const MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+
+async function createDetector(): Promise<AxisPoseDetector> {
+  const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
+  const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+  const create = (delegate: "GPU" | "CPU") =>
+    PoseLandmarker.createFromOptions(vision, {
+      baseOptions: { delegate, modelAssetPath: MODEL_URL },
+      numPoses: 1,
+      runningMode: "VIDEO",
+    });
+
+  let landmarker: PoseLandmarker;
+  try {
+    landmarker = await create("GPU");
+  } catch {
+    landmarker = await create("CPU"); // some mobile browsers reject the GPU delegate
+  }
+
+  return {
+    detect(video: HTMLVideoElement, timestamp: number) {
+      const result = landmarker.detectForVideo(video, timestamp);
+      const pose = result.landmarks[0];
+      if (!pose) return null;
+
+      const landmarks = mapLandmarks(pose);
+      return {
+        confidence: estimateConfidence(landmarks),
+        frameId: frameId++,
+        landmarks,
+        timestamp,
+      };
+    },
+  };
+}
+
 export async function loadAxisPoseDetector(): Promise<AxisPoseDetector> {
   if (!detectorPromise) {
-    detectorPromise = (async () => {
-      const { FilesetResolver, PoseLandmarker } = await import("@mediapipe/tasks-vision");
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm",
-      );
-      const landmarker: PoseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          delegate: "GPU",
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-        },
-        numPoses: 1,
-        runningMode: "VIDEO",
-      });
-
-      return {
-        detect(video: HTMLVideoElement, timestamp: number) {
-          const result = landmarker.detectForVideo(video, timestamp);
-          const pose = result.landmarks[0];
-          if (!pose) return null;
-
-          const landmarks = mapLandmarks(pose);
-          return {
-            confidence: estimateConfidence(landmarks),
-            frameId: frameId++,
-            landmarks,
-            timestamp,
-          };
-        },
-      };
-    })();
+    const pending = createDetector();
+    detectorPromise = pending;
+    pending.catch(() => {
+      // a failed load (offline court wifi, CDN hiccup) must not brick pose until reload
+      if (detectorPromise === pending) detectorPromise = null;
+    });
   }
 
   return detectorPromise;
