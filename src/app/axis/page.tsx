@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { AxisShell } from "../../components/axis/AxisShell";
 
 export default function AxisPage() {
-  redirect("/");
+  return <AxisShell />;
 }

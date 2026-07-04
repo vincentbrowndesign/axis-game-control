@@ -34,6 +34,10 @@ const landmarkNames: Record<number, string> = {
   26: "right_knee",
   27: "left_ankle",
   28: "right_ankle",
+  29: "left_heel",
+  30: "right_heel",
+  31: "left_foot_index",
+  32: "right_foot_index",
 };
 
 let detectorPromise: Promise<AxisPoseDetector> | null = null;

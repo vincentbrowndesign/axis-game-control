@@ -1,3 +1,217 @@
+# Axis Agent Instructions
+
+Axis is a camera-first basketball memory and vision product.
+
+Do not build Axis like a dashboard, SaaS admin panel, generic AI app, or test-selection form.
+
+These instructions are for development agents only. Do not import this file into app code, expose it through routes, copy it into UI, or place it in `public`.
+
+## Core Product Loop
+
+The smallest Axis loop is:
+
+```text
+Camera
+-> detect player / ball / rim
+-> create VisionRead
+-> send selected reads to AI
+-> AI returns MomentCandidate
+-> user confirms or corrects
+-> save as Axis memory
+```
+
+Main rule:
+
+```text
+Vision detects.
+AI interprets.
+User corrects.
+Axis remembers.
+```
+
+## Architecture Rule
+
+Axis does not add capabilities by adding screens.
+
+Axis adds capabilities by converting more signals into structured memory.
+
+Every new capability must plug into:
+
+```text
+Input Source
+-> Signal Adapter
+-> Capability Run
+-> AxisEvidence
+-> AxisSessionObject
+-> AxisMemoryPage
+```
+
+## Release Discipline
+
+Add one capability at a time.
+
+Current release path:
+
+```text
+A1.0 - Camera shell
+A1.1 - Player lock
+A1.2 - Open command toolbar
+A1.3 - Movement chains
+A1.4 - Clips
+A1.5 - Memory
+A1.6 - AI video agent
+```
+
+Do not skip ahead. Current active release is A1.2 - Open Command Toolbar.
+
+## Current Active Capability
+
+- camera
+- player lock
+- open command toolbar
+- local evidence metadata
+
+## Inactive Future Capabilities
+
+- movement chains
+- clips
+- memory persistence
+- AI agent routing
+- ball
+- rim
+- Hugging Face object detection
+- Supabase
+- proof clips
+
+## Current Product Focus
+
+The default user flow should not require built-in tests.
+
+Do not make the user choose:
+
+- Countermovement Jump
+- Lateral Shuffle
+- Sprint
+- Landing
+- Shooting
+
+Those may return later as inferred tags, templates, or filters.
+
+The default loop is:
+
+```text
+Camera opens
+-> player box locks onto athlete
+-> user types anything into the open command toolbar
+-> command becomes an action, note, question, or saved read
+-> local metadata is saved
+```
+
+Every toolbar submit becomes a contextual action, a tool command, a coach note, a correction note, or a pending question. No submit is empty and no text is invalid.
+
+## Active Stack
+
+Camera:
+
+- browser camera / getUserMedia
+
+Pose:
+
+- MediaPipe if needed
+
+Object detection:
+
+- Hugging Face server-side
+
+Deprecated:
+
+- Roboflow is not part of the active path
+
+Storage:
+
+- local first
+- Supabase after local memory works
+
+Export:
+
+- proof frame first
+- proof clip later
+
+## Security
+
+Never expose server tokens to the browser.
+
+`HF_TOKEN` must be server-side only.
+
+Never create `NEXT_PUBLIC_HF_TOKEN`.
+
+Do not show `.env` values in screenshots, logs, UI, or generated docs.
+
+## UI Rules
+
+The main Axis UI should show:
+
+- Start Session
+- AXIS / player / session label
+- Camera surface with player box overlay
+- Single open command toolbar
+- Export control
+- End Session
+
+The main UI must never show:
+
+- Mark Moment
+- Analyze
+- Last Moment
+- Correct / Not Right
+- dashboard cards
+- ball or rim
+
+The main UI must hide:
+
+- SDK names
+- API routes
+- model names
+- raw detections
+- raw track IDs
+- FPS
+- JSON
+- confidence tables
+- health checks
+- debug panels
+
+Debug belongs in `/axis/lab`.
+
+## Hard Bans
+
+Do not add:
+
+- dashboard cards
+- measurement dashboards
+- required landmark panels
+- permanent test category rows
+- fake coaching
+- fake scores
+- training plans
+- generic AI copy
+- new routes for every SDK
+- API routes before local capability works
+
+## Acceptance Rule
+
+Before finishing any task, confirm:
+
+- the camera loop still works
+- the UI did not get more cluttered
+- the new capability outputs `AxisEvidence`
+- debug data is hidden
+- no secrets are exposed
+- lint passes or known pre-existing lint failures are identified
+- typecheck passes
+- build passes
+
+---
+
 # AGENTS.md
 
 ---

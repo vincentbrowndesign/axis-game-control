@@ -43,11 +43,11 @@ export function AxisEmptyState({
     <section className="axis-card axis-empty-state">
       <div>
         <p className="axis-empty-state__eyebrow">Today&apos;s Work</p>
-        <h1>Log Work</h1>
+        <h1>Open Axis</h1>
       </div>
 
       <p className="axis-empty-state__meta">
-        Save what matters without needing the camera.
+          Start a session. Camera opens first, and memory still works without camera.
       </p>
 
       <form onSubmit={onStartSession}>
@@ -93,7 +93,7 @@ export function AxisEmptyState({
         </label>
 
         <button className="axis-primary" type="submit">
-          Save Memory
+          Start Session
         </button>
       </form>
 

@@ -1,11 +1,12 @@
 "use client";
 
-import type { AxisMemorySession, AxisMoment, AxisMomentReviewState } from "./AxisShell";
+import type { AxisEvidence } from "../../axis/core/types";
+import type { AxisMemorySession, AxisMoment } from "./AxisShell";
 
 type Props = {
   elapsedSeconds: number;
+  latestEvidence: AxisEvidence | null;
   latestMoment: AxisMoment | null;
-  onCorrect: (reviewState: AxisMomentReviewState) => void;
   onEndSession: () => void;
   onStartAnother: () => void;
   saveLabel: string;
@@ -15,8 +16,8 @@ type Props = {
 
 export function AxisSessionCard({
   elapsedSeconds,
+  latestEvidence,
   latestMoment,
-  onCorrect,
   onEndSession,
   onStartAnother,
   saveLabel,
@@ -44,8 +45,13 @@ export function AxisSessionCard({
       </p>
 
       <div className="axis-session-card__moment">
-        <small>{latestMoment ? "Last interpreted moment" : "Ready for the first moment"}</small>
-        {latestMoment ? (
+        <small>{latestEvidence ? "Saved read" : "Session memory"}</small>
+        {latestEvidence ? (
+          <>
+            <strong>{latestEvidence.summary}</strong>
+            <span>{latestEvidence.capturedAt ? `Saved ${formatResultTime(latestEvidence.capturedAt)}` : "Saved locally"}</span>
+          </>
+        ) : latestMoment ? (
           <>
             <strong>{latestMoment.interpretedTitle}</strong>
             <div className="axis-live-tags" aria-label="Moment tags">
@@ -53,54 +59,9 @@ export function AxisSessionCard({
               <span>{latestMoment.structure.action}</span>
             </div>
             <span>{latestMoment.structure.outcome}</span>
-            <span>Next: {latestMoment.structure.correction}</span>
-            <div className="axis-session-card__corrections" aria-label="Correction controls">
-              <button className="axis-correction-chip" type="button" onClick={() => onCorrect("correct")}>
-                Correct
-              </button>
-              <button className="axis-correction-chip" type="button" onClick={() => onCorrect("refine")}>
-                Refine
-              </button>
-              <button className="axis-correction-chip" type="button" onClick={() => onCorrect("not_right")}>
-                Not Right
-              </button>
-            </div>
-            <details className="axis-moment-detail">
-              <summary>Show full moment</summary>
-              <dl className="axis-moment-structure">
-                <div>
-                  <dt>Situation</dt>
-                  <dd>{latestMoment.structure.situation}</dd>
-                </div>
-                <div>
-                  <dt>Actor</dt>
-                  <dd>{latestMoment.structure.actor}</dd>
-                </div>
-                <div>
-                  <dt>Action</dt>
-                  <dd>{latestMoment.structure.action}</dd>
-                </div>
-                <div>
-                  <dt>Outcome</dt>
-                  <dd>{latestMoment.structure.outcome}</dd>
-                </div>
-                <div>
-                  <dt>Cause</dt>
-                  <dd>{latestMoment.structure.cause}</dd>
-                </div>
-                <div>
-                  <dt>Correction</dt>
-                  <dd>{latestMoment.structure.correction}</dd>
-                </div>
-                <div>
-                  <dt>Evidence</dt>
-                  <dd>{latestMoment.structure.evidence}</dd>
-                </div>
-              </dl>
-            </details>
           </>
         ) : (
-          <span>Type a quick note or tap a moment when something happens.</span>
+          <span>Use the query toolbar to save the current player read.</span>
         )}
       </div>
 
@@ -108,7 +69,7 @@ export function AxisSessionCard({
         {saved ? (
           <>
             <button className="axis-primary" type="button" onClick={onStartAnother}>
-              New Record
+              New Session
             </button>
             <span className="axis-secondary">{saveLabel}</span>
           </>
@@ -116,22 +77,12 @@ export function AxisSessionCard({
           <>
             <span className="axis-secondary">{saveLabel}</span>
             <button className="axis-session-card__end" type="button" onClick={onEndSession}>
-              Save Memory
+              Save Session
             </button>
             <span className="axis-session-card__save-help">Memory saves when you finish.</span>
           </>
         )}
       </div>
-
-      {saved && (
-        <section className="axis-next-session-card" aria-label="Next Session Card">
-          <small>Next Work Card</small>
-          <strong>{session.nextFocus}</strong>
-          <span>
-            Start with {session.playerName || "the group"} and check whether this carryover still shows up.
-          </span>
-        </section>
-      )}
     </section>
   );
 }
@@ -148,4 +99,10 @@ function labelSessionType(type: string) {
   if (type === "training") return "Training";
   if (type === "practice") return "Practice";
   return "Other";
+}
+
+function formatResultTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "locally";
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

@@ -4,16 +4,12 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createAxisSessionDraftRequest, listAxisSessionDraftsRequest } from "../../lib/axis/client";
 import type { AxisSession } from "../../lib/axis/types";
 import { useAxisAuth } from "../../app/axis/axis-auth-control";
-import { AxisAskSurface } from "./AxisAskSurface";
-import { AxisBottomNav, type AxisNavKey } from "./AxisBottomNav";
 import { AxisEmptyState } from "./AxisEmptyState";
-import { AxisInputDock } from "./AxisInputDock";
 import { AxisMemoryPreview } from "./AxisMemoryPreview";
-import { AxisMemorySurface } from "./AxisMemorySurface";
-import { AxisPlayersSurface } from "./AxisPlayersSurface";
 import { AxisSessionCard } from "./AxisSessionCard";
-import { AxisToolsSurface } from "./AxisToolsSurface";
+import { AxisSessionCamera } from "./AxisSessionCamera";
 import { AxisTopBar } from "./AxisTopBar";
+import type { AxisEvidence } from "../../axis/core/types";
 
 export type AxisMomentType = "typed" | "tap";
 
@@ -50,15 +46,13 @@ export type AxisMemorySession = {
   startedAt: string;
   endedAt?: string;
   moments: AxisMoment[];
+  evidence: AxisEvidence[];
   nextFocus: string;
   savedState: "local" | "needs_sign_in" | "saved";
 };
 
 type AxisSessionType = AxisSession["sessionType"];
 type AxisShellStatus = "idle" | "starting" | "running" | "saved";
-type AxisShellProps = {
-  initialNav?: AxisNavKey;
-};
 
 const localMemoryKey = "axis-a1-mobile-memory";
 
@@ -70,20 +64,8 @@ const sessionTypes: Array<{ label: string; value: AxisSessionType }> = [
   { label: "Other", value: "other" },
 ];
 
-const quickMarks = [
-  { label: "Paint Touch", content: "Got paint" },
-  { label: "Extra Pass", content: "Extra pass was there" },
-  { label: "Late", content: "Too late" },
-  { label: "Footwork", content: "Feet too narrow" },
-  { label: "Spacing", content: "Spacing was off" },
-  { label: "Finish", content: "Finish at the rim" },
-  { label: "Turnover", content: "Turnover" },
-  { label: "Great Rep", content: "The current focus worked on this rep" },
-];
-
-export function AxisShell({ initialNav = "session" }: AxisShellProps) {
+export function AxisShell() {
   const auth = useAxisAuth();
-  const [activeNav, setActiveNav] = useState<AxisNavKey>(initialNav);
   const [shellStatus, setShellStatus] = useState<AxisShellStatus>("idle");
   const [sessionTitle, setSessionTitle] = useState("Today's Work");
   const [playerName, setPlayerName] = useState("");
@@ -93,7 +75,6 @@ export function AxisShell({ initialNav = "session" }: AxisShellProps) {
   const [initialLocalMemory] = useState(loadLocalMemory);
   const [recentSessions, setRecentSessions] = useState<AxisMemorySession[]>(initialLocalMemory.sessions);
   const [backendDrafts, setBackendDrafts] = useState<AxisSession[]>([]);
-  const [momentDraft, setMomentDraft] = useState("");
   const [saveLabel, setSaveLabel] = useState("Local");
   const [errorMessage] = useState(initialLocalMemory.errorMessage);
 
@@ -123,6 +104,7 @@ export function AxisShell({ initialNav = "session" }: AxisShellProps) {
 
   const elapsedSeconds = useSessionTimer(shellStatus === "running", activeSession?.startedAt);
   const latestMoment = activeSession?.moments.at(-1) ?? null;
+  const latestEvidence = activeSession?.evidence.at(-1) ?? null;
 
   const topStatus = useMemo(() => {
     if (auth.status === "loading") return "Checking sign in";
@@ -143,6 +125,7 @@ export function AxisShell({ initialNav = "session" }: AxisShellProps) {
       sessionType,
       startedAt: now,
       moments: [],
+      evidence: [],
       nextFocus: "Capture one real moment, then name the correction before saving memory.",
       savedState: "local",
     };
@@ -153,61 +136,17 @@ export function AxisShell({ initialNav = "session" }: AxisShellProps) {
     setShellStatus("running");
   }
 
-  function markMoment(content: string, type: AxisMomentType = "tap") {
-    const trimmed = content.trim();
-    if (!trimmed || !activeSession) return;
-
-    const now = new Date().toISOString();
-    const nextMoment: AxisMoment = {
-      id: createLocalId(),
-      content: trimmed,
-      createdAt: now,
-      elapsedSeconds,
-      interpretedTitle: interpretMoment(trimmed),
-      needsReview: true,
-      reviewState: "needs_review",
-      structure: structureMoment(trimmed, activeSession),
-      type,
-    };
-
-    setActiveSession({
-      ...activeSession,
-      moments: [...activeSession.moments, nextMoment],
-      nextFocus: getNextFocus(trimmed),
-    });
-    setMomentDraft("");
-    setSaveLabel("Memory updated locally");
-  }
-
-  function submitMoment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    markMoment(momentDraft, "typed");
-  }
-
-  function correctLatestMoment(reviewState: AxisMomentReviewState) {
-    if (!activeSession || !latestMoment) return;
-    setActiveSession({
-      ...activeSession,
-      moments: activeSession.moments.map((moment) =>
-        moment.id === latestMoment.id
-          ? {
-              ...moment,
-              needsReview: reviewState !== "correct",
-              reviewState,
-              structure: {
-                ...moment.structure,
-                correction: getCorrectionForReview(reviewState, moment.structure.correction),
-              },
-            }
-          : moment,
-      ),
-      nextFocus: getNextFocusForReview(reviewState, latestMoment),
-    });
-    setSaveLabel("Moment updated locally");
-  }
-
   function rememberSession(session: AxisMemorySession) {
     setRecentSessions((sessions) => [session, ...sessions.filter((stored) => stored.id !== session.id)].slice(0, 8));
+  }
+
+  function captureEvidence(evidence: AxisEvidence[]) {
+    if (!activeSession) return;
+    setActiveSession({
+      ...activeSession,
+      evidence: [...activeSession.evidence, ...evidence],
+    });
+    setSaveLabel("Player read saved locally");
   }
 
   async function endSession() {
@@ -276,7 +215,6 @@ export function AxisShell({ initialNav = "session" }: AxisShellProps) {
   function startAnother() {
     setActiveSession(null);
     setShellStatus("idle");
-    setMomentDraft("");
     setSaveLabel(auth.status === "signed_in" ? "Ready" : "Sign in to save memory");
   }
 
@@ -299,31 +237,34 @@ export function AxisShell({ initialNav = "session" }: AxisShellProps) {
       />
 
       <section className="axis-mobile-shell__body" aria-label="Axis session memory">
-        {activeNav === "session" && (
-          <>
-            {!activeSession && (
-              <AxisEmptyState
-                errorMessage={errorMessage}
-                objective={objective}
-                onObjectiveChange={setObjective}
-                onPlayerNameChange={setPlayerName}
-                onSessionTitleChange={setSessionTitle}
-                onSessionTypeChange={setSessionType}
-                onStartSession={startSession}
-                playerName={playerName}
-                saveLabel={saveLabel}
-                sessionTitle={sessionTitle}
-                sessionType={sessionType}
-                sessionTypes={sessionTypes}
-                signedIn={auth.status === "signed_in"}
-              />
-            )}
+        {!activeSession && (
+          <AxisEmptyState
+            errorMessage={errorMessage}
+            objective={objective}
+            onObjectiveChange={setObjective}
+            onPlayerNameChange={setPlayerName}
+            onSessionTitleChange={setSessionTitle}
+            onSessionTypeChange={setSessionType}
+            onStartSession={startSession}
+            playerName={playerName}
+            saveLabel={saveLabel}
+            sessionTitle={sessionTitle}
+            sessionType={sessionType}
+            sessionTypes={sessionTypes}
+            signedIn={auth.status === "signed_in"}
+          />
+        )}
 
-            {activeSession && (
+        {activeSession && (
+          <>
+            {shellStatus === "running" && (
+              <AxisSessionCamera sessionId={activeSession.id} onEvidence={captureEvidence} />
+            )}
+            {shellStatus !== "running" && (
               <AxisSessionCard
                 elapsedSeconds={elapsedSeconds}
+                latestEvidence={latestEvidence}
                 latestMoment={latestMoment}
-                onCorrect={correctLatestMoment}
                 onEndSession={endSession}
                 onStartAnother={startAnother}
                 saveLabel={saveLabel}
@@ -334,49 +275,8 @@ export function AxisShell({ initialNav = "session" }: AxisShellProps) {
           </>
         )}
 
-        {activeNav === "ask" && (
-          <AxisAskSurface sessions={recentMemory} />
-        )}
-
-        {activeNav === "memory" && (
-          auth.status === "signed_in" ? (
-            <AxisMemorySurface sessions={recentMemory} />
-          ) : (
-            <section className="axis-panel">
-              <div className="axis-surface-header">
-                <p>Review</p>
-                <h2>Sign in to review memory.</h2>
-                <span>Vision can preview. Log works locally. Review and saved memory need an account.</span>
-              </div>
-              <button className="axis-primary" type="button" onClick={() => void auth.signInWithGoogle()}>
-                Sign in
-              </button>
-            </section>
-          )
-        )}
-
-        {activeNav === "players" && (
-          <AxisPlayersSurface sessions={recentMemory} onStartSession={() => setActiveNav("session")} />
-        )}
-
-        {activeNav === "tools" && (
-          <AxisToolsSurface />
-        )}
-
-        {activeNav === "session" && activeSession && shellStatus === "running" && (
-          <AxisInputDock
-            draft={momentDraft}
-            onDraftChange={setMomentDraft}
-            onQuickMark={(content) => markMoment(content)}
-            quickMarks={quickMarks}
-            onSubmit={submitMoment}
-          />
-        )}
-
-        {activeNav === "session" && <AxisMemoryPreview sessions={recentMemory.slice(0, 3)} compact />}
+        <AxisMemoryPreview sessions={recentMemory.slice(0, 3)} compact />
       </section>
-
-      <AxisBottomNav active={activeNav} onChange={setActiveNav} />
 
       <style jsx global>{axisShellStyles}</style>
     </main>
@@ -436,6 +336,7 @@ function mapBackendSessionToMemory(session: AxisSession): AxisMemorySession {
     startedAt: session.startedAt || session.createdAt,
     ...(session.endedAt ? { endedAt: session.endedAt } : {}),
     moments,
+    evidence: [],
     nextFocus: session.nextSessionCard?.nextFocus || "Reopen this saved session and continue the carryover.",
     savedState: "saved",
   };
@@ -481,6 +382,7 @@ function createSearchableText(session: AxisMemorySession) {
     session.playerName,
     createSessionSummary(session),
     session.nextFocus,
+    ...session.evidence.map((evidence) => evidence.summary),
     ...session.moments.flatMap((moment) => [
       moment.interpretedTitle,
       moment.content,
@@ -528,22 +430,10 @@ function interpretMoment(input: string) {
   return input.length > 48 ? `${input.slice(0, 45)}...` : input;
 }
 
-function getNextFocus(input: string) {
-  const normalized = input.toLowerCase();
-  if (hasPaintExtraRead(normalized)) return "Recognize help earlier and make the extra pass on time.";
-  if (normalized.includes("horns")) return "Reset faster into horns before the next possession.";
-  if (normalized.includes("feet too narrow")) return "Widen the base before the next rep.";
-  if (normalized.includes("again") || normalized.includes("run it again")) return "Run the next rep with one clear correction.";
-  if (normalized.includes("great") || normalized.includes("worked")) return "Keep the cue that made this rep work and see if it repeats.";
-  if (normalized.includes("feet") || normalized.includes("footwork")) return "Check base, balance, and timing next.";
-  if (normalized.includes("paint")) return "Look for the next decision after the paint touch.";
-  return "Add one cause or correction before ending the session.";
-}
-
 function structureMoment(input: string, session: AxisMemorySession): AxisMomentStructure {
   const normalized = input.toLowerCase();
   const actor = session.playerName || "Current player";
-  const evidence = "Manual note";
+  const evidence = session.evidence.at(-1)?.summary || "Manual note";
 
   if (hasPaintExtraRead(normalized)) {
     return {
@@ -702,20 +592,6 @@ function structureMoment(input: string, session: AxisMemorySession): AxisMomentS
 
 function hasPaintExtraRead(normalized: string) {
   return normalized.includes("paint") && (normalized.includes("extra") || normalized.includes("missed the extra"));
-}
-
-function getCorrectionForReview(reviewState: AxisMomentReviewState, currentCorrection: string) {
-  if (reviewState === "correct") return "Keep this structure and repeat the useful cue";
-  if (reviewState === "refine") return "Refine this moment with one sharper detail";
-  if (reviewState === "not_right") return "Rewrite this moment before trusting it";
-  return currentCorrection;
-}
-
-function getNextFocusForReview(reviewState: AxisMomentReviewState, moment: AxisMoment) {
-  if (reviewState === "correct") return `Carry over: ${moment.structure.correction}`;
-  if (reviewState === "refine") return "Add one sharper detail before the next session.";
-  if (reviewState === "not_right") return "Correct the memory before building from it.";
-  return "Review the latest moment before ending the session.";
 }
 
 function createLocalId() {
