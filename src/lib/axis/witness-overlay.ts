@@ -1,0 +1,322 @@
+/* ============================================================
+   AXIS witness overlay — the instrument's eyes, drawn in the
+   same broadcast language as the bug and the lower third.
+
+   Draws: corner brackets around the athlete, a skewed lime tag
+   with the athlete ID riding the bracket, white bones / lime
+   joints with smoothing, and live angle readouts that change
+   with the armed test.
+
+   Stays dumb on purpose: it runs the pose loop, draws, and
+   emits `axis:pose` events (raw normalized landmarks + computed
+   angles). It never makes judgments — the witness pipeline is
+   the only consumer of geometry.
+
+   External contract (survives any UI rewrite):
+     window.AxisWitness.setTest(name | null)
+     window.AxisWitness.setAthlete(id | null)
+     window "axis:pose" CustomEvent<AxisPoseEventDetail>
+============================================================ */
+
+import {
+  loadAxisPoseDetector,
+  type AxisPoseDetector,
+  type AxisPoseLandmark,
+} from "./axis-pose-detector";
+
+export type AxisPoseEventDetail = {
+  timestamp: number;
+  test: string | null;
+  athlete: string | null;
+  landmarks: AxisPoseLandmark[];
+  angles: Record<string, number>;
+};
+
+export type AxisWitnessOverlay = {
+  start: () => void;
+  stop: () => void;
+  setTest: (test: string | null) => void;
+  setAthlete: (athlete: string | null) => void;
+};
+
+declare global {
+  interface Window {
+    AxisWitness?: {
+      setTest: (test: string | null) => void;
+      setAthlete: (athlete: string | null) => void;
+    };
+  }
+}
+
+const LIME = "#c8f542";
+const INK = "#000";
+const WHITE = "#fff";
+const SKEW = Math.tan((-12 * Math.PI) / 180); // matches the HUD's skewX(-12deg)
+
+/* angle at joint B between BA and BC, aspect-corrected, degrees */
+const ANGLE_JOINTS: Record<string, [string, string, string]> = {
+  left_knee: ["left_hip", "left_knee", "left_ankle"],
+  right_knee: ["right_hip", "right_knee", "right_ankle"],
+  left_hip: ["left_shoulder", "left_hip", "left_knee"],
+  right_hip: ["right_shoulder", "right_hip", "right_knee"],
+  left_elbow: ["left_shoulder", "left_elbow", "left_wrist"],
+  right_elbow: ["right_shoulder", "right_elbow", "right_wrist"],
+};
+
+/* which readouts ride which armed test */
+const KNEES = ["left_knee", "right_knee"];
+const KNEES_HIPS = [...KNEES, "left_hip", "right_hip"];
+const ELBOWS = ["left_elbow", "right_elbow"];
+const TEST_ANGLES: Record<string, string[]> = {
+  JUMP: KNEES,
+  SPRINT: KNEES,
+  DECEL: KNEES,
+  LATERAL: KNEES,
+  CMJ: KNEES_HIPS,
+  LANDING: KNEES_HIPS,
+  "DROP JUMP": KNEES_HIPS,
+  SHOOTING: ELBOWS,
+};
+
+const BONES: Array<[number, number]> = [
+  [11, 12], // shoulders
+  [11, 13], [13, 15], // left arm
+  [12, 14], [14, 16], // right arm
+  [11, 23], [12, 24], [23, 24], // torso
+  [23, 25], [25, 27], // left leg
+  [24, 26], [26, 28], // right leg
+  [27, 29], [29, 31], [27, 31], // left foot
+  [28, 30], [30, 32], [28, 32], // right foot
+];
+
+const SMOOTH_ALPHA = 0.35; // EMA so the skeleton doesn't jitter
+const MIN_VIS = 0.4;
+
+type Smoothed = { x: number; y: number; visibility: number };
+
+function vis(l: { visibility?: number }): number {
+  return typeof l.visibility === "number" ? l.visibility : 1;
+}
+
+export function createAxisWitnessOverlay(opts: {
+  video: HTMLVideoElement;
+  canvas: HTMLCanvasElement;
+}): AxisWitnessOverlay {
+  const { video, canvas } = opts;
+  const ctx = canvas.getContext("2d");
+
+  let running = false;
+  let raf = 0;
+  let detector: AxisPoseDetector | null = null;
+  let test: string | null = null;
+  let athlete: string | null = null;
+  let lastTs = -1;
+  const smoothed = new Map<number, Smoothed>();
+
+  function angleDeg(
+    byName: Map<string, Smoothed>,
+    joint: [string, string, string],
+    aspect: number,
+  ): number | null {
+    const a = byName.get(joint[0]);
+    const b = byName.get(joint[1]);
+    const c = byName.get(joint[2]);
+    if (!a || !b || !c) return null;
+    if (a.visibility < MIN_VIS || b.visibility < MIN_VIS || c.visibility < MIN_VIS) return null;
+    const bax = (a.x - b.x) * aspect;
+    const bay = a.y - b.y;
+    const bcx = (c.x - b.x) * aspect;
+    const bcy = c.y - b.y;
+    const la = Math.hypot(bax, bay);
+    const lc = Math.hypot(bcx, bcy);
+    if (la === 0 || lc === 0) return null;
+    const cos = Math.min(1, Math.max(-1, (bax * bcx + bay * bcy) / (la * lc)));
+    return (Math.acos(cos) * 180) / Math.PI;
+  }
+
+  /* skewed lime chip with ink text — same voice as the score bug */
+  function drawChip(x: number, y: number, text: string, px: number) {
+    if (!ctx) return;
+    ctx.font = `${px}px Anton, Impact, 'Arial Narrow', sans-serif`;
+    const w = ctx.measureText(text).width + px * 0.9;
+    const h = px * 1.5;
+    ctx.save();
+    ctx.transform(1, 0, SKEW, 1, x, y);
+    ctx.fillStyle = LIME;
+    ctx.fillRect(0, -h, w, h);
+    ctx.fillStyle = INK;
+    ctx.textBaseline = "middle";
+    ctx.transform(1, 0, -SKEW, 1, 0, 0);
+    ctx.fillText(text, px * 0.45 + SKEW * (h / 2) * -1, -h / 2);
+    ctx.restore();
+  }
+
+  function frame() {
+    if (!running) return;
+    raf = requestAnimationFrame(frame);
+    if (!ctx || !detector) return;
+    if (video.readyState < 2 || video.videoWidth === 0) return;
+
+    const ts = performance.now();
+    if (ts <= lastTs) return; // detectForVideo needs monotonic timestamps
+    lastTs = ts;
+
+    const result = detector.detect(video, ts);
+
+    /* size canvas to its CSS box, map normalized coords through object-fit: cover */
+    const dpr = window.devicePixelRatio || 1;
+    const cw = canvas.clientWidth;
+    const ch = canvas.clientHeight;
+    if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) {
+      canvas.width = Math.round(cw * dpr);
+      canvas.height = Math.round(ch * dpr);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!result) {
+      smoothed.clear();
+      return;
+    }
+
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const scale = Math.max(cw / vw, ch / vh);
+    const ox = (cw - vw * scale) / 2;
+    const oy = (ch - vh * scale) / 2;
+    const toX = (nx: number) => (nx * vw * scale + ox) * dpr;
+    const toY = (ny: number) => (ny * vh * scale + oy) * dpr;
+
+    /* smooth */
+    const byIndex = new Map<number, Smoothed>();
+    const byName = new Map<string, Smoothed>();
+    for (const l of result.landmarks) {
+      const prev = smoothed.get(l.index);
+      const next: Smoothed = prev
+        ? {
+            x: prev.x + (l.x - prev.x) * SMOOTH_ALPHA,
+            y: prev.y + (l.y - prev.y) * SMOOTH_ALPHA,
+            visibility: prev.visibility + (vis(l) - prev.visibility) * SMOOTH_ALPHA,
+          }
+        : { x: l.x, y: l.y, visibility: vis(l) };
+      smoothed.set(l.index, next);
+      byIndex.set(l.index, next);
+      byName.set(l.name, next);
+    }
+
+    /* corner brackets around the athlete — not a full box */
+    const seen = [...byIndex.values()].filter((p) => p.visibility >= MIN_VIS);
+    if (seen.length >= 4) {
+      let minX = 1, minY = 1, maxX = 0, maxY = 0;
+      for (const p of seen) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+      const padX = (maxX - minX) * 0.12 + 0.01;
+      const padY = (maxY - minY) * 0.08 + 0.01;
+      const x0 = toX(minX - padX);
+      const y0 = toY(minY - padY);
+      const x1 = toX(maxX + padX);
+      const y1 = toY(maxY + padY);
+      const arm = Math.min(x1 - x0, y1 - y0) * 0.16;
+
+      ctx.strokeStyle = WHITE;
+      ctx.lineWidth = 3 * dpr;
+      ctx.lineCap = "square";
+      ctx.beginPath();
+      ctx.moveTo(x0, y0 + arm); ctx.lineTo(x0, y0); ctx.lineTo(x0 + arm, y0);
+      ctx.moveTo(x1 - arm, y0); ctx.lineTo(x1, y0); ctx.lineTo(x1, y0 + arm);
+      ctx.moveTo(x1, y1 - arm); ctx.lineTo(x1, y1); ctx.lineTo(x1 - arm, y1);
+      ctx.moveTo(x0 + arm, y1); ctx.lineTo(x0, y1); ctx.lineTo(x0, y1 - arm);
+      ctx.stroke();
+
+      /* athlete tag riding the top-left bracket */
+      if (athlete) drawChip(x0, y0 - 4 * dpr, athlete, 13 * dpr);
+    }
+
+    /* white bones */
+    ctx.strokeStyle = WHITE;
+    ctx.lineWidth = 2 * dpr;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    for (const [ai, bi] of BONES) {
+      const a = byIndex.get(ai);
+      const b = byIndex.get(bi);
+      if (!a || !b || a.visibility < MIN_VIS || b.visibility < MIN_VIS) continue;
+      ctx.moveTo(toX(a.x), toY(a.y));
+      ctx.lineTo(toX(b.x), toY(b.y));
+    }
+    ctx.stroke();
+
+    /* lime joints */
+    ctx.fillStyle = LIME;
+    for (const p of byIndex.values()) {
+      if (p.visibility < MIN_VIS) continue;
+      ctx.beginPath();
+      ctx.arc(toX(p.x), toY(p.y), 3.5 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    /* angle readouts for the armed test */
+    const aspect = vw / vh;
+    const angles: Record<string, number> = {};
+    for (const name of Object.keys(ANGLE_JOINTS)) {
+      const deg = angleDeg(byName, ANGLE_JOINTS[name], aspect);
+      if (deg !== null) angles[name] = Math.round(deg * 10) / 10;
+    }
+    const active = test ? (TEST_ANGLES[test] ?? []) : [];
+    for (const name of active) {
+      if (!(name in angles)) continue;
+      const joint = byName.get(ANGLE_JOINTS[name][1]);
+      if (!joint) continue;
+      const left = name.startsWith("left");
+      const jx = toX(joint.x);
+      const jy = toY(joint.y);
+      drawChip(jx + (left ? 14 : -58) * dpr, jy - 8 * dpr, `${Math.round(angles[name])}°`, 12 * dpr);
+    }
+
+    /* >>> AXIS-CORE: the witness pipeline consumes this — geometry out, no judgments */
+    window.dispatchEvent(
+      new CustomEvent<AxisPoseEventDetail>("axis:pose", {
+        detail: { timestamp: ts, test, athlete, landmarks: result.landmarks, angles },
+      }),
+    );
+  }
+
+  const overlay: AxisWitnessOverlay = {
+    start() {
+      if (running) return;
+      running = true;
+      window.AxisWitness = { setTest: overlay.setTest, setAthlete: overlay.setAthlete };
+      loadAxisPoseDetector()
+        .then((d) => {
+          if (!running) return;
+          detector = d;
+        })
+        .catch(() => {
+          /* stays dumb: no pose model, no drawing, no error UI */
+        });
+      raf = requestAnimationFrame(frame);
+    },
+    stop() {
+      running = false;
+      cancelAnimationFrame(raf);
+      smoothed.clear();
+      if (window.AxisWitness?.setTest === overlay.setTest) delete window.AxisWitness;
+      if (ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    },
+    setTest(next) {
+      test = next;
+    },
+    setAthlete(next) {
+      athlete = next;
+    },
+  };
+
+  return overlay;
+}

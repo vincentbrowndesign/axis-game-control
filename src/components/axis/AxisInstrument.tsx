@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
+import { createAxisWitnessOverlay, type AxisWitnessOverlay } from "../../lib/axis/witness-overlay";
+
 /* ============================================================
    AXIS — broadcast instrument
    Three things on screen: the bug, the test, the trigger.
@@ -183,6 +185,7 @@ export default function AxisInstrument() {
     };
 
     let disposed = false;
+    let witness: AxisWitnessOverlay | null = null;
     let thirdTimer: ReturnType<typeof setTimeout> | undefined;
     let swapTimer: ReturnType<typeof setTimeout> | undefined;
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -219,6 +222,7 @@ export default function AxisInstrument() {
           el.classList.add("armed");
           el.classList.remove("swap");
           renderDots();
+          witness?.setTest(TESTS[i]); // witness readouts follow the armed test
         }, 120);
         // >>> AXIS-CORE: load constraint set for TESTS[i] (constraint-registry.ts)
       },
@@ -229,6 +233,7 @@ export default function AxisInstrument() {
         if (!hit) return flashThird(`NO ATHLETE "${name}"`, true);
         S.athlete = hit;
         $("#athlete-name").textContent = hit.replace("ATHLETE ", "A");
+        witness?.setAthlete(hit.replace("ATHLETE ", "A"));
         closeSheet();
         flashThird(hit);
       },
@@ -349,7 +354,9 @@ export default function AxisInstrument() {
       $("#sheet").classList.remove("open");
       $("#veil").classList.remove("open");
     }
-    $("#athlete-list").innerHTML = ATHLETES.map((a) => `<button class="row" data-a="${a}">${a}</button>`).join("");
+    $("#athlete-list").innerHTML = ATHLETES.map(
+      (a) => `<button type="button" class="row" data-a="${a}">${a}</button>`,
+    ).join("");
 
     /* ---------- camera ---------- */
     async function initCam() {
@@ -365,7 +372,15 @@ export default function AxisInstrument() {
         S.stream = stream;
         $<HTMLVideoElement>("#cam").srcObject = stream;
         $("#cam-fallback").hidden = true;
-        // >>> AXIS-CORE: feed stream to pose model; draw on #overlay-canvas
+        if (!witness) {
+          witness = createAxisWitnessOverlay({
+            video: $<HTMLVideoElement>("#cam"),
+            canvas: $<HTMLCanvasElement>("#overlay-canvas"),
+          });
+          witness.start();
+          if (S.ti >= 0) witness.setTest(TESTS[S.ti]);
+          if (S.athlete) witness.setAthlete(S.athlete.replace("ATHLETE ", "A"));
+        }
       } catch {
         if (!disposed) $("#cam-fallback").hidden = false;
       }
@@ -452,6 +467,7 @@ export default function AxisInstrument() {
       root.removeEventListener("touchstart", onTouchStart);
       root.removeEventListener("touchend", onTouchEnd);
       root.removeEventListener("click", onClick);
+      witness?.stop();
       if (S.recorder && S.recorder.state !== "inactive") S.recorder.stop();
       S.stream?.getTracks().forEach((t) => t.stop());
     };
@@ -476,14 +492,14 @@ export default function AxisInstrument() {
         <div className="mark">
           <span>AXIS</span>
         </div>
-        <button className="who" id="athlete-btn">
+        <button type="button" className="who" id="athlete-btn">
           <span id="athlete-name">ATHLETE</span>
           <span className="dot" />
         </button>
         <div className="clock">
           <span id="rec-time">0:00</span>
         </div>
-        <button id="save-btn" data-intent="save">
+        <button type="button" id="save-btn" data-intent="save">
           <span>SAVE CAL</span>
         </button>
       </div>
@@ -497,7 +513,7 @@ export default function AxisInstrument() {
       <div id="deck">
         <div id="test-name">SELECT TEST</div>
         <div id="test-dots" />
-        <button id="record-btn" data-intent="record" aria-label="Record rep">
+        <button type="button" id="record-btn" data-intent="record" aria-label="Record rep">
           <span className="core" />
         </button>
         <div id="hint">swipe test · tap video to capture · hold test for commands</div>
@@ -514,7 +530,7 @@ export default function AxisInstrument() {
           spellCheck={false}
           enterKeyHint="go"
         />
-        <button id="cmd-go">
+        <button type="button" id="cmd-go">
           <span>RUN</span>
         </button>
       </div>
