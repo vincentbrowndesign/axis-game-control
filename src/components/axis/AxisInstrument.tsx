@@ -50,6 +50,8 @@ overscroll-behavior:none; font-family: ui-sans-serif, system-ui, sans-serif; tou
 #axis-instrument #overlay-canvas{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
 /* >>> AXIS-CORE: pose skeleton draws here */
 #axis-instrument #cam-fallback{ position:absolute; inset:0; display:grid; place-items:center; color:var(--dim); font-size:.85rem; text-align:center; padding:2rem; }
+/* author display:grid overrides the UA [hidden] rule — restore it explicitly */
+#axis-instrument #cam-fallback[hidden]{ display:none; }
 
 #axis-instrument #flash{ position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:50; }
 #axis-instrument #flash.go{ animation:axis-flash .28s ease-out; }
@@ -216,6 +218,8 @@ export default function AxisInstrument() {
     let swapTimer: ReturnType<typeof setTimeout> | undefined;
     let tickTimer: ReturnType<typeof setTimeout> | undefined;
     let pressTimer: ReturnType<typeof setTimeout> | undefined;
+    let compositeRaf = 0;
+    let recordCanvas: HTMLCanvasElement | null = null;
 
     /* ---------- lower third ---------- */
     function flashThird(msg: string, err = false, sub?: string | null) {
@@ -299,7 +303,9 @@ export default function AxisInstrument() {
           const c = document.createElement("canvas");
           c.width = v.videoWidth;
           c.height = v.videoHeight;
-          c.getContext("2d")?.drawImage(v, 0, 0);
+          const cctx = c.getContext("2d");
+          cctx?.drawImage(v, 0, 0);
+          if (cctx) witness?.drawTo(cctx, c.width, c.height); // bake in what the coach saw
           c.toBlob(
             (b) => {
               if (!b || disposed) return;
@@ -425,13 +431,31 @@ export default function AxisInstrument() {
       root.classList.add("recording");
       if (window.MediaRecorder && S.stream) {
         try {
+          // composite video + witness overlay onto a canvas so the saved rep carries what the coach saw
+          const v = $<HTMLVideoElement>("#cam");
+          if (!recordCanvas) recordCanvas = document.createElement("canvas");
+          const rc = recordCanvas;
+          rc.width = v.videoWidth || 1280;
+          rc.height = v.videoHeight || 720;
+          const rctx = rc.getContext("2d");
+          const compositeTick = () => {
+            if (!S.recording || disposed) return;
+            if (rctx) {
+              rctx.drawImage(v, 0, 0, rc.width, rc.height);
+              witness?.drawTo(rctx, rc.width, rc.height);
+            }
+            compositeRaf = requestAnimationFrame(compositeTick);
+          };
+          compositeRaf = requestAnimationFrame(compositeTick);
+
           const mime = pickAxisRecorderMimeType();
-          S.recorder = new MediaRecorder(S.stream, mime ? { mimeType: mime } : undefined);
+          S.recorder = new MediaRecorder(rc.captureStream(30), mime ? { mimeType: mime } : undefined);
           S.recorder.ondataavailable = (e) => {
             if (e.data.size) S.chunks.push(e.data);
           };
           S.recorder.start();
         } catch {
+          cancelAnimationFrame(compositeRaf);
           S.recorder = null;
         }
       }
@@ -441,6 +465,7 @@ export default function AxisInstrument() {
     const stopRep = () => {
       S.recording = false;
       root.classList.remove("recording");
+      cancelAnimationFrame(compositeRaf);
       const secs = Math.round((Date.now() - S.recStart) / 1000);
       const test = armedTest();
       if (S.recorder && S.recorder.state !== "inactive") {
@@ -489,20 +514,40 @@ export default function AxisInstrument() {
     ).join("");
 
     /* ---------- camera ---------- */
-    async function initCam() {
+    async function requestCameraStream(): Promise<MediaStream> {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        return await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
           audio: false,
         });
-        if (disposed) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        S.stream = stream;
-        $<HTMLVideoElement>("#cam").srcObject = stream;
-        $("#cam-fallback").hidden = true;
-        if (!witness) {
+      } catch {
+        // no rear camera (laptop/desktop testing) or the constraint was rejected — take any camera
+        return navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1920 }, height: { ideal: 1080 } },
+          audio: false,
+        });
+      }
+    }
+
+    async function initCam() {
+      let stream: MediaStream;
+      try {
+        stream = await requestCameraStream();
+      } catch {
+        // only a genuine camera failure (both attempts) shows the fallback
+        if (!disposed) $("#cam-fallback").hidden = false;
+        return;
+      }
+      if (disposed) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      S.stream = stream;
+      $<HTMLVideoElement>("#cam").srcObject = stream;
+      $("#cam-fallback").hidden = true;
+      // >>> AXIS-CORE: feed stream to pose model; draw on #overlay-canvas
+      if (!witness) {
+        try {
           witness = createAxisWitnessOverlay({
             video: $<HTMLVideoElement>("#cam"),
             canvas: $<HTMLCanvasElement>("#overlay-canvas"),
@@ -515,9 +560,10 @@ export default function AxisInstrument() {
           witness.start();
           if (S.ti >= 0) witness.setTest(TESTS[S.ti]);
           if (S.athlete) witness.setAthlete(S.athlete.replace("ATHLETE ", "A"));
+        } catch (err) {
+          // the camera is fine — a witness setup failure must never look like "no camera"
+          console.error("[axis-instrument] witness init failed", err);
         }
-      } catch {
-        if (!disposed) $("#cam-fallback").hidden = false;
       }
     }
 
@@ -597,6 +643,7 @@ export default function AxisInstrument() {
       clearTimeout(swapTimer);
       clearTimeout(tickTimer);
       clearTimeout(pressTimer);
+      cancelAnimationFrame(compositeRaf);
       document.removeEventListener("keydown", onKeydown);
       window.removeEventListener("axis:pose", onPose);
       root.removeEventListener("touchstart", onTouchStart);
