@@ -8,7 +8,11 @@ import {
   exportAxisEvidenceFiles,
   pickAxisRecorderMimeType,
 } from "../../lib/axis/evidence-export";
-import { createAxisWitnessOverlay, type AxisWitnessOverlay } from "../../lib/axis/witness-overlay";
+import {
+  createAxisWitnessOverlay,
+  type AxisPoseEventDetail,
+  type AxisWitnessOverlay,
+} from "../../lib/axis/witness-overlay";
 
 /* ============================================================
    AXIS — broadcast instrument
@@ -76,7 +80,7 @@ border:0; font-family:var(--display); font-size:.9rem; letter-spacing:.04em;
 #axis-instrument.has-evidence #save-btn{ display:flex; }
 #axis-instrument #save-btn:active{ background:var(--lime); }
 
-/* ---------- lower third (status flashes) ---------- */
+/* ---------- lower third (status flashes + answers) ---------- */
 #axis-instrument #third{
 position:fixed; left:0; bottom:calc(var(--safe-b) + 218px); z-index:30;
 background:var(--lime); color:var(--ink);
@@ -84,10 +88,17 @@ font-family:var(--display); font-size:1.05rem; letter-spacing:.04em;
 padding:8px 22px 8px 20px; transform:skewX(-12deg) translateX(-110%);
 transition:transform .22s cubic-bezier(.2,.9,.2,1);
 filter:drop-shadow(0 2px 8px rgba(0,0,0,.5));
+display:flex; flex-direction:column; align-items:flex-start; gap:2px;
 }
 #axis-instrument #third.err{ background:var(--rec); color:var(--white); }
 #axis-instrument #third.show{ transform:skewX(-12deg) translateX(-6px); }
 #axis-instrument #third span{ display:inline-block; transform:skewX(12deg); }
+#axis-instrument #third #third-sub{
+display:none; font-family:ui-sans-serif, system-ui, sans-serif;
+font-size:.72rem; font-weight:500; letter-spacing:.02em;
+line-height:1.35; max-width:74vw; text-transform:none;
+}
+#axis-instrument #third.has-sub #third-sub{ display:inline-block; }
 
 /* ---------- the test (swipe to change) ---------- */
 #axis-instrument #deck{
@@ -184,10 +195,20 @@ export default function AxisInstrument() {
       athlete: null as string | null,
       recording: false,
       recStart: 0,
+      reps: 0,
       stream: null as MediaStream | null,
       recorder: null as MediaRecorder | null,
       chunks: [] as Blob[],
     };
+
+    /* live witness state — the resolver's session grounding */
+    const live = { angles: {} as Record<string, number>, lastPoseAt: 0 };
+    const onPose = (e: Event) => {
+      const d = (e as CustomEvent<AxisPoseEventDetail>).detail;
+      live.angles = d.angles;
+      live.lastPoseAt = performance.now();
+    };
+    window.addEventListener("axis:pose", onPose);
 
     let disposed = false;
     let witness: AxisWitnessOverlay | null = null;
@@ -197,13 +218,21 @@ export default function AxisInstrument() {
     let pressTimer: ReturnType<typeof setTimeout> | undefined;
 
     /* ---------- lower third ---------- */
-    function flashThird(msg: string, err = false) {
+    function flashThird(msg: string, err = false, sub?: string | null) {
       const t = $("#third");
       $("#third-text").textContent = msg;
+      const subEl = $("#third-sub");
+      if (sub) {
+        subEl.textContent = sub;
+        t.classList.add("has-sub");
+      } else {
+        subEl.textContent = "";
+        t.classList.remove("has-sub");
+      }
       t.classList.toggle("err", err);
       t.classList.add("show");
       clearTimeout(thirdTimer);
-      thirdTimer = setTimeout(() => t.classList.remove("show"), 1600);
+      thirdTimer = setTimeout(() => t.classList.remove("show"), sub ? 4200 : 1600);
     }
 
     /* ---------- evidence queue (SAVE exports to camera roll) ---------- */
@@ -338,7 +367,54 @@ export default function AxisInstrument() {
       const v = verbs[head.toLowerCase()];
       if (v) return dispatch(v, arg);
       if (TESTS.some((t) => t.toLowerCase().startsWith(head.toLowerCase()))) return dispatch("test", s);
-      flashThird(`CAN'T PARSE "${s}"`, true);
+      void resolveOpen(s); // no dead ends — everything else resolves to a command or an answer
+    }
+
+    /* ---------- open resolver ---------- */
+    let resolving = false;
+    async function resolveOpen(text: string) {
+      if (resolving) return;
+      resolving = true;
+      flashThird(text.toUpperCase().slice(0, 40)); // echo while the resolver works
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 12_000);
+        const res = await fetch("/api/axis/resolver", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          signal: ctrl.signal,
+          body: JSON.stringify({
+            text,
+            state: {
+              test: armedTest(),
+              athlete: athleteTag(),
+              recording: S.recording,
+              reps: S.reps,
+              queued: pendingFiles.length,
+              poseFresh: performance.now() - live.lastPoseAt < 2000,
+              angles: live.angles,
+            },
+          }),
+        });
+        clearTimeout(timer);
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as
+          | { kind: "command"; intent: string; arg: string | null }
+          | { kind: "answer"; headline: string; sub: string | null };
+        if (disposed) return;
+        if (data.kind === "command" && registry[data.intent]) {
+          dispatch(data.intent, data.arg ?? undefined);
+        } else if (data.kind === "answer" && data.headline) {
+          flashThird(data.headline, false, data.sub);
+        } else {
+          throw new Error("bad shape");
+        }
+      } catch {
+        if (!disposed)
+          flashThird("RESOLVER OFFLINE", true, "Direct commands still work: jump, record, capture, save");
+      } finally {
+        resolving = false;
+      }
     }
 
     /* ---------- recording ---------- */
@@ -379,6 +455,7 @@ export default function AxisInstrument() {
             ext: axisExtForMime(type),
           });
           queueEvidence(new File([new Blob(S.chunks, { type })], name, { type }));
+          S.reps++;
           S.chunks = [];
         };
         rec.stop();
@@ -521,6 +598,7 @@ export default function AxisInstrument() {
       clearTimeout(tickTimer);
       clearTimeout(pressTimer);
       document.removeEventListener("keydown", onKeydown);
+      window.removeEventListener("axis:pose", onPose);
       root.removeEventListener("touchstart", onTouchStart);
       root.removeEventListener("touchend", onTouchEnd);
       root.removeEventListener("click", onClick);
@@ -564,6 +642,7 @@ export default function AxisInstrument() {
       {/* lower third */}
       <div id="third">
         <span id="third-text" />
+        <span id="third-sub" />
       </div>
 
       {/* deck */}
@@ -581,7 +660,7 @@ export default function AxisInstrument() {
         <span className="prompt">›</span>
         <input
           id="cmd"
-          placeholder="jump · record · capture · save · athlete 2"
+          placeholder="jump · record · save · how's my landing"
           autoComplete="off"
           autoCapitalize="off"
           spellCheck={false}

@@ -11,6 +11,7 @@
     "trigger:deploy": "trigger deploy"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@clerk/nextjs": "^7.4.1",
     "@mediapipe/tasks-vision": "^0.10.35",
     "@mux/mux-node": "^14.0.1",
