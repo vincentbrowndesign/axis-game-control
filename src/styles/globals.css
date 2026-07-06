@@ -12161,3 +12161,483 @@ button.axis-review-row:focus-visible {
   font-size: 0.66rem;
   font-style: normal;
 }
+
+/* ── Axis OS (Trophy Labs Event Container v0.1) ─────────────────────────── */
+
+.axis-os {
+  background:
+    linear-gradient(180deg, rgba(142, 255, 67, 0.055), transparent 22rem),
+    #050706;
+  color: #f6f8f0;
+  display: grid;
+  align-content: start;
+  font-family: Arial, Helvetica, sans-serif;
+  gap: 1.25rem;
+  min-height: 100dvh;
+  padding-bottom: clamp(2rem, 6vw, 4rem);
+}
+
+.axis-os * {
+  box-sizing: border-box;
+}
+
+.axis-os a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.axis-os-topbar span,
+.axis-os-topbar a,
+.axis-os-topbar strong,
+.axis-os h2,
+.axis-os-primary,
+.axis-os-chip,
+.axis-os-source strong,
+.axis-os-action strong,
+.axis-os-row strong,
+.axis-os-field > span,
+.axis-os-inline button,
+.axis-os-mark,
+.axis-os-livefooter a,
+.axis-os-livefooter button,
+.axis-os-livebadge {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.axis-os-topbar {
+  align-items: center;
+  border-bottom: 1px solid rgba(246, 248, 240, 0.12);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-height: 4rem;
+  padding: 0.75rem clamp(1rem, 3vw, 2rem);
+}
+
+.axis-os-topbar > div {
+  display: grid;
+  line-height: 1.05;
+}
+
+.axis-os-topbar span {
+  color: rgba(246, 248, 240, 0.6);
+  font-size: 0.72rem;
+}
+
+.axis-os-topbar strong,
+.axis-os-topbar a {
+  font-size: 1.05rem;
+}
+
+.axis-os-hero {
+  display: grid;
+  gap: 0.9rem;
+  padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 3vw, 2rem) 0;
+}
+
+.axis-os-hero p {
+  color: rgba(246, 248, 240, 0.62);
+  font-size: 0.95rem;
+  margin: 0;
+  max-width: 34rem;
+}
+
+.axis-os-primary {
+  appearance: none;
+  background: #9dff45;
+  border: 1px solid #9dff45;
+  border-radius: 0;
+  color: #050706;
+  cursor: pointer;
+  display: block;
+  font-size: clamp(1.3rem, 4.5vw, 1.9rem);
+  min-height: 4rem;
+  padding: 1rem 1.25rem;
+  text-align: center;
+  width: 100%;
+}
+
+.axis-os-primary:disabled {
+  background: rgba(246, 248, 240, 0.14);
+  border-color: transparent;
+  color: rgba(246, 248, 240, 0.4);
+  cursor: default;
+}
+
+.axis-os-primary--quiet {
+  background: rgba(246, 248, 240, 0.06);
+  border: 1px solid rgba(157, 255, 69, 0.42);
+  color: #9dff45;
+  font-size: 1rem;
+  min-height: 3rem;
+}
+
+.axis-os-list,
+.axis-os-form,
+.axis-os-modules,
+.axis-os-eventhead,
+.axis-os-actiongrid,
+.axis-os-liveactions {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0 clamp(1rem, 3vw, 2rem);
+}
+
+.axis-os h2 {
+  color: #9dff45;
+  font-size: 0.78rem;
+  margin: 0.4rem 0 0;
+}
+
+.axis-os-empty {
+  color: rgba(246, 248, 240, 0.45);
+  font-size: 0.88rem;
+  margin: 0;
+}
+
+.axis-os-error {
+  color: #ff5c39;
+  font-size: 0.88rem;
+  margin: 0;
+  padding: 0 clamp(1rem, 3vw, 2rem);
+}
+
+.axis-os-row {
+  align-items: baseline;
+  appearance: none;
+  background: rgba(246, 248, 240, 0.05);
+  border: 1px solid rgba(246, 248, 240, 0.12);
+  border-radius: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  font: inherit;
+  gap: 0.35rem 0.9rem;
+  justify-content: space-between;
+  min-height: 3.25rem;
+  padding: 0.85rem 0.95rem;
+  text-align: left;
+  width: 100%;
+}
+
+.axis-os-row strong {
+  font-size: 1rem;
+}
+
+.axis-os-row span {
+  color: rgba(246, 248, 240, 0.55);
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.axis-os-modules div {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+}
+
+.axis-os-modules article {
+  border: 1px solid rgba(246, 248, 240, 0.12);
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.85rem 0.95rem;
+}
+
+.axis-os-modules article strong {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.axis-os-modules article p {
+  color: rgba(246, 248, 240, 0.5);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.axis-os-form {
+  gap: 1.1rem;
+  padding-top: clamp(1.25rem, 4vw, 2rem);
+}
+
+.axis-os-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.axis-os-field > span {
+  color: #9dff45;
+  font-size: 0.78rem;
+}
+
+.axis-os-field input,
+.axis-os-field textarea,
+.axis-os-inline input {
+  background: rgba(246, 248, 240, 0.06);
+  border: 1px solid rgba(246, 248, 240, 0.16);
+  border-radius: 0;
+  color: #f6f8f0;
+  font: inherit;
+  font-size: 1rem;
+  min-height: 2.9rem;
+  padding: 0.7rem 0.85rem;
+  width: 100%;
+}
+
+.axis-os-field textarea {
+  resize: vertical;
+}
+
+.axis-os-field input:focus,
+.axis-os-field textarea:focus,
+.axis-os-inline input:focus {
+  border-color: #9dff45;
+  outline: none;
+}
+
+.axis-os-chiprow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.axis-os-chip {
+  appearance: none;
+  background: rgba(246, 248, 240, 0.06);
+  border: 1px solid rgba(246, 248, 240, 0.16);
+  border-radius: 0;
+  color: #f6f8f0;
+  cursor: pointer;
+  font-size: 0.8rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.axis-os-chip--on {
+  background: #9dff45;
+  border-color: #9dff45;
+  color: #050706;
+}
+
+.axis-os-sourcegrid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.axis-os-source {
+  appearance: none;
+  background: rgba(246, 248, 240, 0.05);
+  border: 1px solid rgba(246, 248, 240, 0.16);
+  border-radius: 0;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 0.3rem;
+  padding: 0.9rem 0.95rem;
+  text-align: left;
+}
+
+.axis-os-source strong {
+  font-size: 1rem;
+}
+
+.axis-os-source p {
+  color: rgba(246, 248, 240, 0.5);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.axis-os-source--on {
+  border-color: #9dff45;
+  outline: 1px solid #9dff45;
+}
+
+.axis-os-source--on strong {
+  color: #9dff45;
+}
+
+.axis-os-eventhead {
+  gap: 0.35rem;
+  padding-top: clamp(1.25rem, 4vw, 2rem);
+}
+
+.axis-os-eventhead h1 {
+  font-size: clamp(2rem, 7vw, 3.4rem);
+  font-weight: 900;
+  line-height: 0.95;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.axis-os-eventhead p {
+  color: rgba(246, 248, 240, 0.55);
+  font-size: 0.9rem;
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.axis-os-actiongrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.axis-os-action {
+  border: 1px solid rgba(246, 248, 240, 0.16);
+  display: grid;
+  gap: 0.3rem;
+  min-height: 5rem;
+  padding: 0.85rem 0.75rem;
+}
+
+.axis-os-action strong {
+  color: #9dff45;
+  font-size: 1.05rem;
+}
+
+.axis-os-action span {
+  color: rgba(246, 248, 240, 0.5);
+  font-size: 0.72rem;
+}
+
+/* Live marker screen */
+
+.axis-os--live {
+  grid-template-rows: auto auto 1fr auto;
+}
+
+.axis-os-livebadge {
+  color: rgba(246, 248, 240, 0.4);
+  font-size: 1rem;
+}
+
+.axis-os-livebadge--on {
+  color: #ff5c39;
+}
+
+.axis-os-clock {
+  display: grid;
+  justify-items: center;
+  padding: clamp(1rem, 4vw, 2rem) 1rem 0;
+}
+
+.axis-os-clock span {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-size: clamp(3.5rem, 16vw, 7rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.axis-os-markgrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0 clamp(1rem, 3vw, 2rem);
+}
+
+.axis-os-mark {
+  appearance: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: clamp(2rem, 9vw, 3.5rem);
+  min-height: clamp(9rem, 32vw, 14rem);
+  touch-action: manipulation;
+}
+
+.axis-os-mark:active {
+  transform: scale(0.98);
+}
+
+.axis-os-mark--keep {
+  background: #9dff45;
+  color: #050706;
+}
+
+.axis-os-mark--fix {
+  background: #ff5c39;
+  color: #050706;
+}
+
+.axis-os-keep {
+  color: #9dff45;
+}
+
+.axis-os-fix {
+  color: #ff5c39;
+}
+
+.axis-os-livefooter {
+  display: grid;
+  padding: 0 clamp(1rem, 3vw, 2rem);
+}
+
+.axis-os-livefooter a,
+.axis-os-livefooter button {
+  appearance: none;
+  background: rgba(246, 248, 240, 0.06);
+  border: 1px solid rgba(246, 248, 240, 0.16);
+  border-radius: 0;
+  color: #f6f8f0;
+  cursor: pointer;
+  font-size: 0.95rem;
+  min-height: 3rem;
+  padding: 0.8rem 1rem;
+  text-align: center;
+}
+
+.axis-os-inline {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.axis-os-inline button {
+  appearance: none;
+  background: rgba(246, 248, 240, 0.06);
+  border: 1px solid rgba(157, 255, 69, 0.42);
+  border-radius: 0;
+  color: #9dff45;
+  cursor: pointer;
+  font-size: 0.9rem;
+  min-height: 2.9rem;
+  padding: 0.7rem 0.9rem;
+}
+
+.axis-os-inline button:disabled {
+  border-color: rgba(246, 248, 240, 0.14);
+  color: rgba(246, 248, 240, 0.35);
+  cursor: default;
+}
+
+.axis-os-moment {
+  display: grid;
+  gap: 0;
+}
+
+.axis-os-editor {
+  border: 1px solid rgba(246, 248, 240, 0.12);
+  border-top: none;
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.95rem;
+}
+
+@media (min-width: 40rem) {
+  .axis-os-sourcegrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .axis-os-inline {
+    grid-template-columns: 1fr auto;
+  }
+
+  .axis-os-inline input:not(:first-child) {
+    grid-column: 1 / -1;
+  }
+}

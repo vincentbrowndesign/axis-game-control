@@ -14,6 +14,7 @@ export default function AxisLabPage() {
         <p>Axis Lab</p>
         <h1>Capability registry</h1>
         <span>Debug, provider, and release details stay here.</span>
+        <a href="/axis/lab/shell">Open legacy session shell</a>
       </header>
 
       <section aria-label="Release path">
