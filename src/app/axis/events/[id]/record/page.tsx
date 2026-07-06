@@ -1,60 +1,49 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  AxisOsHeader,
+  AxisOsNotice,
+  AxisOsScreenState,
+  formatAxisClock,
+} from "../../../../../components/axis/AxisOsKit";
 import type { AxisEventContainer, AxisMoment, AxisMomentLabel } from "../../../../../lib/axis-event-container";
-
-function formatClock(totalSeconds: number) {
-  const clamped = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(clamped / 3600);
-  const minutes = Math.floor((clamped % 3600) / 60);
-  const seconds = clamped % 60;
-  const core = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  return hours ? `${hours}:${core}` : core;
-}
+import { useAxisEventDetail } from "../../../../../lib/use-axis-event-detail";
 
 export default function AxisEventRecordPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const eventId = params.id;
-  const [event, setEvent] = useState<AxisEventContainer | null>(null);
-  const [moments, setMoments] = useState<AxisMoment[]>([]);
+  const { detail, mutate, state } = useAxisEventDetail(eventId);
   const [elapsed, setElapsed] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastMark, setLastMark] = useState<string | null>(null);
+  const lastMarkTimer = useRef<number | null>(null);
+
+  const event = detail?.event ?? null;
+  const startedAt = event?.recording_started_at ?? null;
+  const live = Boolean(startedAt);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const response = await fetch(`/api/axis/events/${eventId}`).catch(() => null);
-      if (cancelled) return;
-      if (!response?.ok) {
-        setError("Could not load this event.");
-        return;
-      }
-      const body = (await response.json()) as { event: AxisEventContainer; moments: AxisMoment[] };
-      if (cancelled) return;
-      setEvent(body.event);
-      setMoments(body.moments.slice(-6).reverse());
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [eventId]);
-
-  useEffect(() => {
-    if (!event?.recording_started_at) return;
-    const startedMs = new Date(event.recording_started_at).getTime();
+    if (!startedAt) return;
+    const startedMs = new Date(startedAt).getTime();
     const tick = () => setElapsed((Date.now() - startedMs) / 1000);
-    tick();
     const interval = window.setInterval(tick, 500);
     return () => window.clearInterval(interval);
-  }, [event?.recording_started_at]);
+  }, [startedAt]);
+
+  useEffect(() => {
+    return () => {
+      if (lastMarkTimer.current) window.clearTimeout(lastMarkTimer.current);
+    };
+  }, []);
 
   async function goLive() {
     if (busy) return;
     setBusy(true);
+    setError(null);
     const response = await fetch(`/api/axis/events/${eventId}`, {
       body: JSON.stringify({ start_clock: true, status: "live" }),
       headers: { "Content-Type": "application/json" },
@@ -66,12 +55,12 @@ export default function AxisEventRecordPage() {
       return;
     }
     const body = (await response.json()) as { event: AxisEventContainer };
-    setEvent(body.event);
+    mutate((current) => ({ ...current, event: body.event }));
   }
 
   async function mark(label: AxisMomentLabel) {
-    if (!event?.recording_started_at) return;
-    const timestamp = (Date.now() - new Date(event.recording_started_at).getTime()) / 1000;
+    if (!startedAt) return;
+    const timestamp = (Date.now() - new Date(startedAt).getTime()) / 1000;
     const response = await fetch(`/api/axis/events/${eventId}/moments`, {
       body: JSON.stringify({ timestamp_seconds: timestamp, ui_label: label }),
       headers: { "Content-Type": "application/json" },
@@ -82,8 +71,11 @@ export default function AxisEventRecordPage() {
       return;
     }
     const body = (await response.json()) as { moment: AxisMoment };
-    setMoments((current) => [body.moment, ...current].slice(0, 6));
+    mutate((current) => ({ ...current, moments: [...current.moments, body.moment] }));
     setError(null);
+    setLastMark(`${label} saved · ${formatAxisClock(body.moment.timestamp_seconds)}`);
+    if (lastMarkTimer.current) window.clearTimeout(lastMarkTimer.current);
+    lastMarkTimer.current = window.setTimeout(() => setLastMark(null), 2000);
   }
 
   async function endLive() {
@@ -97,25 +89,50 @@ export default function AxisEventRecordPage() {
     router.push(`/axis/events/${eventId}/review`);
   }
 
-  const live = Boolean(event?.recording_started_at);
+  if (!detail || !event) {
+    return (
+      <AxisOsScreenState
+        backHref={`/axis/events/${eventId}`}
+        title="Axis Live"
+        tone={state === "loading" ? "loading" : state === "offline" ? "offline" : "error"}
+      >
+        {state === "loading" && "Loading event…"}
+        {state === "offline" && "Event memory is offline. Check Supabase configuration."}
+        {state === "error" && "Could not load this event."}
+      </AxisOsScreenState>
+    );
+  }
+
+  const recentMoments = detail.moments.slice(-5).reverse();
 
   return (
     <main className="axis-os axis-os--live">
-      <header className="axis-os-topbar">
-        <Link href={`/axis/events/${eventId}`}>{event?.title ?? "Event"}</Link>
-        <strong className={live ? "axis-os-livebadge axis-os-livebadge--on" : "axis-os-livebadge"}>AXIS LIVE</strong>
-      </header>
+      <AxisOsHeader
+        backHref={`/axis/events/${eventId}`}
+        backLabel={event.title}
+        title="Axis Live"
+        right={
+          <strong className={live ? "axis-os-livebadge axis-os-livebadge--on" : "axis-os-livebadge"}>
+            {live ? "● LIVE" : "STANDBY"}
+          </strong>
+        }
+      />
 
-      <section className="axis-os-clock">
-        <span>{live ? formatClock(elapsed) : "00:00"}</span>
+      {/* Camera surface lands here in a later release; the stage keeps its slot. */}
+      <section className="axis-os-stage" aria-label="Broadcast stage">
+        <div className={live ? "axis-os-stage-surface axis-os-stage-surface--live" : "axis-os-stage-surface"}>
+          <span className="axis-os-stage-signal">{live ? "AXIS LIVE" : "STANDBY"}</span>
+          <span className="axis-os-stage-clock">{live ? formatAxisClock(elapsed) : "00:00"}</span>
+          {lastMark && <span className="axis-os-stage-mark">{lastMark}</span>}
+        </div>
       </section>
 
       {!live ? (
         <section className="axis-os-liveactions">
-          <button className="axis-os-primary" disabled={busy || !event} onClick={goLive} type="button">
+          <button className="axis-os-primary" disabled={busy} onClick={goLive} type="button">
             Go Live
           </button>
-          <p className="axis-os-empty">The clock starts once. KEEP and FIX stamp against it.</p>
+          <AxisOsNotice tone="empty">The clock starts once. KEEP and FIX stamp against it.</AxisOsNotice>
         </section>
       ) : (
         <section className="axis-os-markgrid">
@@ -129,15 +146,18 @@ export default function AxisEventRecordPage() {
       )}
 
       <section className="axis-os-list" aria-label="Latest moments">
-        {moments.map((moment) => (
+        {live && !recentMoments.length && <AxisOsNotice tone="empty">Marked moments show here.</AxisOsNotice>}
+        {recentMoments.map((moment) => (
           <div className="axis-os-row" key={moment.id}>
-            <strong>{moment.ui_label}</strong>
-            <span>{formatClock(moment.timestamp_seconds)}</span>
+            <div className="axis-os-row-main">
+              <strong className={moment.ui_label === "KEEP" ? "axis-os-keep" : "axis-os-fix"}>{moment.ui_label}</strong>
+            </div>
+            <em className="axis-os-row-go">{formatAxisClock(moment.timestamp_seconds)}</em>
           </div>
         ))}
       </section>
 
-      {error && <p className="axis-os-error">{error}</p>}
+      {error && <AxisOsNotice tone="error">{error}</AxisOsNotice>}
 
       {live && (
         <footer className="axis-os-livefooter">

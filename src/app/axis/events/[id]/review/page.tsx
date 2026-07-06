@@ -2,21 +2,20 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  AxisOsHeader,
+  AxisOsNotice,
+  AxisOsScreenState,
+  AxisOsStatusChip,
+  formatAxisClock,
+} from "../../../../../components/axis/AxisOsKit";
 import {
   AXIS_LENS_TAGS,
   AXIS_OUTPUT_TARGETS,
-  type AxisEventContainer,
-  type AxisEventPlayer,
   type AxisMoment,
 } from "../../../../../lib/axis-event-container";
-
-function formatClock(totalSeconds: number) {
-  const clamped = Math.max(0, Math.floor(totalSeconds));
-  const minutes = Math.floor(clamped / 60);
-  const seconds = clamped % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
+import { useAxisEventDetail } from "../../../../../lib/use-axis-event-detail";
 
 function toggle(list: string[], value: string) {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
@@ -25,9 +24,7 @@ function toggle(list: string[], value: string) {
 export default function AxisEventReviewPage() {
   const params = useParams<{ id: string }>();
   const eventId = params.id;
-  const [event, setEvent] = useState<AxisEventContainer | null>(null);
-  const [moments, setMoments] = useState<AxisMoment[]>([]);
-  const [players, setPlayers] = useState<AxisEventPlayer[]>([]);
+  const { detail, mutate, state } = useAxisEventDetail(eventId);
   const [openId, setOpenId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [eventPlayerId, setEventPlayerId] = useState<string>("");
@@ -36,33 +33,20 @@ export default function AxisEventReviewPage() {
   const [outputTargets, setOutputTargets] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const savedTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const response = await fetch(`/api/axis/events/${eventId}`).catch(() => null);
-      if (cancelled) return;
-      if (!response?.ok) {
-        setError("Could not load this event.");
-        return;
-      }
-      const body = (await response.json()) as {
-        event: AxisEventContainer;
-        moments: AxisMoment[];
-        players: AxisEventPlayer[];
-      };
-      if (cancelled) return;
-      setEvent(body.event);
-      setMoments(body.moments);
-      setPlayers(body.players);
-    })();
     return () => {
-      cancelled = true;
+      if (savedTimer.current) window.clearTimeout(savedTimer.current);
     };
-  }, [eventId, reloadKey]);
+  }, []);
 
   function openMoment(moment: AxisMoment) {
+    if (openId === moment.id) {
+      setOpenId(null);
+      return;
+    }
     setOpenId(moment.id);
     setNote(moment.note ?? "");
     setEventPlayerId(moment.event_player_id ?? "");
@@ -73,9 +57,9 @@ export default function AxisEventReviewPage() {
   }
 
   async function saveMoment(momentId: string) {
-    if (busy) return;
+    if (busy || !detail) return;
     setBusy(true);
-    const linkedPlayer = players.find((player) => player.id === eventPlayerId);
+    const linkedPlayer = detail.players.find((player) => player.id === eventPlayerId);
     const response = await fetch(`/api/axis/moments/${momentId}`, {
       body: JSON.stringify({
         event_player_id: eventPlayerId || null,
@@ -96,116 +80,186 @@ export default function AxisEventReviewPage() {
       setError("Could not save the moment.");
       return;
     }
+    const body = (await response.json()) as { moment: AxisMoment };
+    mutate((current) => ({
+      ...current,
+      moments: current.moments.map((moment) => (moment.id === momentId ? body.moment : moment)),
+    }));
     setOpenId(null);
-    setReloadKey((key) => key + 1);
+    setError(null);
+    setSavedId(momentId);
+    if (savedTimer.current) window.clearTimeout(savedTimer.current);
+    savedTimer.current = window.setTimeout(() => setSavedId(null), 2000);
   }
+
+  if (!detail) {
+    return (
+      <AxisOsScreenState
+        backHref={`/axis/events/${eventId}`}
+        title="Review"
+        tone={state === "loading" ? "loading" : state === "offline" ? "offline" : "error"}
+      >
+        {state === "loading" && "Loading moments…"}
+        {state === "offline" && "Event memory is offline. Check Supabase configuration."}
+        {state === "error" && "Could not load this event."}
+      </AxisOsScreenState>
+    );
+  }
+
+  const { event, moments, players } = detail;
+  const tagged = moments.filter(
+    (moment) => moment.event_player_id || moment.lens_tags.length || moment.output_targets.length,
+  ).length;
 
   return (
     <main className="axis-os">
-      <header className="axis-os-topbar">
-        <Link href={`/axis/events/${eventId}`}>{event?.title ?? "Event"}</Link>
-        <span>Review</span>
-      </header>
+      <AxisOsHeader
+        backHref={`/axis/events/${eventId}`}
+        backLabel={event.title}
+        title="Review"
+        right={<AxisOsStatusChip label={`${tagged}/${moments.length} tagged`} tone={tagged === moments.length && moments.length > 0 ? "ready" : "idle"} />}
+      />
 
       <section className="axis-os-list" aria-label="Moments">
-        {!moments.length && <p className="axis-os-empty">No moments yet. Mark KEEP or FIX on the live screen.</p>}
-        {moments.map((moment) => (
-          <div className="axis-os-moment" key={moment.id}>
-            <button className="axis-os-row" onClick={() => openMoment(moment)} type="button">
-              <strong className={moment.ui_label === "KEEP" ? "axis-os-keep" : "axis-os-fix"}>{moment.ui_label}</strong>
-              <span>
-                {formatClock(moment.timestamp_seconds)}
-                {moment.event_player_id
-                  ? ` · ${players.find((player) => player.id === moment.event_player_id)?.display_name ?? "player"}`
-                  : ""}
-                {moment.lens_tags.length ? ` · ${moment.lens_tags.join(" ")}` : ""}
-              </span>
-            </button>
-
-            {openId === moment.id && (
-              <div className="axis-os-editor">
-                <div className="axis-os-field">
-                  <span>Player</span>
-                  <div className="axis-os-chiprow">
-                    <button
-                      className={!eventPlayerId ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
-                      onClick={() => setEventPlayerId("")}
-                      type="button"
-                    >
-                      Team
-                    </button>
-                    {players.map((player) => (
-                      <button
-                        className={player.id === eventPlayerId ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
-                        key={player.id}
-                        onClick={() => setEventPlayerId(player.id)}
-                        type="button"
-                      >
-                        {player.display_name}
-                      </button>
-                    ))}
-                  </div>
+        {!moments.length && (
+          <AxisOsNotice tone="empty">No moments yet. Mark KEEP or FIX on the live screen.</AxisOsNotice>
+        )}
+        {moments.map((moment) => {
+          const playerName = moment.event_player_id
+            ? players.find((player) => player.id === moment.event_player_id)?.display_name
+            : null;
+          const open = openId === moment.id;
+          return (
+            <article
+              className={`axis-os-card axis-os-card--${moment.ui_label === "KEEP" ? "keep" : "fix"}${open ? " axis-os-card--open" : ""}`}
+              key={moment.id}
+            >
+              <button className="axis-os-card-head" onClick={() => openMoment(moment)} type="button">
+                <div className="axis-os-card-title">
+                  <strong className={moment.ui_label === "KEEP" ? "axis-os-keep" : "axis-os-fix"}>
+                    {moment.ui_label}
+                  </strong>
+                  <em>{formatAxisClock(moment.timestamp_seconds)}</em>
+                  {playerName && <span>{playerName}</span>}
+                  {savedId === moment.id && <span className="axis-os-savedchip">Saved</span>}
                 </div>
-
-                <div className="axis-os-field">
-                  <span>Lens</span>
-                  <div className="axis-os-chiprow">
-                    {AXIS_LENS_TAGS.map((tag) => (
-                      <button
-                        className={lensTags.includes(tag) ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
-                        key={tag}
-                        onClick={() => setLensTags((current) => toggle(current, tag))}
-                        type="button"
-                      >
+                {(moment.lens_tags.length > 0 || moment.output_targets.length > 0 || moment.outcome_tags.length > 0) && (
+                  <div className="axis-os-card-tags">
+                    {moment.lens_tags.map((tag) => (
+                      <span className="axis-os-minichip" key={`lens-${tag}`}>
                         {tag}
-                      </button>
+                      </span>
+                    ))}
+                    {moment.outcome_tags.map((tag) => (
+                      <span className="axis-os-minichip axis-os-minichip--outcome" key={`outcome-${tag}`}>
+                        {tag}
+                      </span>
+                    ))}
+                    {moment.output_targets.map((target) => (
+                      <span className="axis-os-minichip axis-os-minichip--target" key={`target-${target}`}>
+                        → {target.replace("_", " ")}
+                      </span>
                     ))}
                   </div>
-                </div>
+                )}
+                {moment.note && <p className="axis-os-card-note">{moment.note}</p>}
+              </button>
 
-                <label className="axis-os-field">
-                  <span>Outcome</span>
-                  <input
-                    onChange={(input) => setOutcome(input.target.value)}
-                    placeholder="made shot, drift right"
-                    value={outcome}
-                  />
-                </label>
-
-                <div className="axis-os-field">
-                  <span>Output</span>
-                  <div className="axis-os-chiprow">
-                    {AXIS_OUTPUT_TARGETS.map((target) => (
+              {open && (
+                <div className="axis-os-editor">
+                  <div className="axis-os-field">
+                    <span>Player</span>
+                    <div className="axis-os-chiprow">
                       <button
-                        className={outputTargets.includes(target) ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
-                        key={target}
-                        onClick={() => setOutputTargets((current) => toggle(current, target))}
+                        className={!eventPlayerId ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
+                        onClick={() => setEventPlayerId("")}
                         type="button"
                       >
-                        {target.replace("_", " ")}
+                        Team
                       </button>
-                    ))}
+                      {players.map((player) => (
+                        <button
+                          className={player.id === eventPlayerId ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
+                          key={player.id}
+                          onClick={() => setEventPlayerId(player.id)}
+                          type="button"
+                        >
+                          {player.display_name}
+                        </button>
+                      ))}
+                    </div>
+                    {!players.length && (
+                      <AxisOsNotice tone="empty">
+                        Add players on the <Link href={`/axis/events/${eventId}`}>event screen</Link> to tag them here.
+                      </AxisOsNotice>
+                    )}
                   </div>
+
+                  <div className="axis-os-field">
+                    <span>Lens</span>
+                    <div className="axis-os-chiprow">
+                      {AXIS_LENS_TAGS.map((tag) => (
+                        <button
+                          className={lensTags.includes(tag) ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
+                          key={tag}
+                          onClick={() => setLensTags((current) => toggle(current, tag))}
+                          type="button"
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <label className="axis-os-field">
+                    <span>Outcome</span>
+                    <input
+                      onChange={(input) => setOutcome(input.target.value)}
+                      placeholder="made shot, drift right"
+                      value={outcome}
+                    />
+                  </label>
+
+                  <div className="axis-os-field">
+                    <span>Output</span>
+                    <div className="axis-os-chiprow">
+                      {AXIS_OUTPUT_TARGETS.map((target) => (
+                        <button
+                          className={outputTargets.includes(target) ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
+                          key={target}
+                          onClick={() => setOutputTargets((current) => toggle(current, target))}
+                          type="button"
+                        >
+                          {target.replace("_", " ")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <label className="axis-os-field">
+                    <span>Note</span>
+                    <input onChange={(input) => setNote(input.target.value)} placeholder="What happened" value={note} />
+                  </label>
+
+                  <button
+                    className="axis-os-primary"
+                    disabled={busy}
+                    onClick={() => saveMoment(moment.id)}
+                    type="button"
+                  >
+                    {busy ? "Saving…" : "Save Moment"}
+                  </button>
                 </div>
-
-                <label className="axis-os-field">
-                  <span>Note</span>
-                  <input onChange={(input) => setNote(input.target.value)} placeholder="What happened" value={note} />
-                </label>
-
-                <button className="axis-os-primary" disabled={busy} onClick={() => saveMoment(moment.id)} type="button">
-                  Save Moment
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </article>
+          );
+        })}
       </section>
 
-      {error && <p className="axis-os-error">{error}</p>}
+      {error && <AxisOsNotice tone="error">{error}</AxisOsNotice>}
 
       <footer className="axis-os-livefooter">
-        <Link href={`/axis/events/${eventId}/report`}>Build Report</Link>
+        <Link href={`/axis/events/${eventId}/report`}>Build Report →</Link>
       </footer>
     </main>
   );

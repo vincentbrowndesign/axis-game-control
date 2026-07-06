@@ -12186,18 +12186,24 @@ button.axis-review-row:focus-visible {
   text-decoration: none;
 }
 
-.axis-os-topbar span,
-.axis-os-topbar a,
-.axis-os-topbar strong,
+.axis-os-brand span,
+.axis-os-brand strong,
+.axis-os-back,
 .axis-os h2,
 .axis-os-primary,
 .axis-os-chip,
+.axis-os-status,
 .axis-os-source strong,
-.axis-os-action strong,
+.axis-os-flowstep strong,
 .axis-os-row strong,
+.axis-os-card-title strong,
 .axis-os-field > span,
 .axis-os-inline button,
 .axis-os-mark,
+.axis-os-stage-signal,
+.axis-os-stage-clock,
+.axis-os-stage-mark,
+.axis-os-savedchip,
 .axis-os-livefooter a,
 .axis-os-livefooter button,
 .axis-os-livebadge {
@@ -12217,19 +12223,56 @@ button.axis-review-row:focus-visible {
   padding: 0.75rem clamp(1rem, 3vw, 2rem);
 }
 
-.axis-os-topbar > div {
+.axis-os-brand {
   display: grid;
+  gap: 0.15rem;
   line-height: 1.05;
+  min-width: 0;
 }
 
-.axis-os-topbar span {
+.axis-os-brand span,
+.axis-os-back {
   color: rgba(246, 248, 240, 0.6);
   font-size: 0.72rem;
 }
 
-.axis-os-topbar strong,
-.axis-os-topbar a {
+.axis-os-brand strong {
   font-size: 1.05rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.axis-os-topbar-right {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.5rem;
+}
+
+.axis-os-tagline {
+  color: rgba(246, 248, 240, 0.45);
+  font-size: 0.7rem;
+  max-width: 11rem;
+  text-align: right;
+}
+
+.axis-os-status {
+  border: 1px solid rgba(246, 248, 240, 0.25);
+  color: rgba(246, 248, 240, 0.6);
+  font-size: 0.68rem;
+  padding: 0.3rem 0.5rem;
+  white-space: nowrap;
+}
+
+.axis-os-status--live {
+  border-color: rgba(255, 92, 57, 0.55);
+  color: #ff5c39;
+}
+
+.axis-os-status--ready {
+  border-color: rgba(157, 255, 69, 0.5);
+  color: #9dff45;
 }
 
 .axis-os-hero {
@@ -12278,8 +12321,6 @@ button.axis-review-row:focus-visible {
 .axis-os-list,
 .axis-os-form,
 .axis-os-modules,
-.axis-os-eventhead,
-.axis-os-actiongrid,
 .axis-os-liveactions {
   display: grid;
   gap: 0.6rem;
@@ -12292,21 +12333,102 @@ button.axis-review-row:focus-visible {
   margin: 0.4rem 0 0;
 }
 
-.axis-os-empty {
-  color: rgba(246, 248, 240, 0.45);
+.axis-os-notice {
   font-size: 0.88rem;
   margin: 0;
 }
 
-.axis-os-error {
+.axis-os-notice--loading,
+.axis-os-notice--empty {
+  color: rgba(246, 248, 240, 0.45);
+}
+
+.axis-os-notice--error {
   color: #ff5c39;
-  font-size: 0.88rem;
-  margin: 0;
+}
+
+.axis-os-notice--offline {
+  color: #ffb347;
+}
+
+.axis-os-notice--saved {
+  color: #9dff45;
+}
+
+.axis-os-notice a {
+  color: #9dff45;
+  text-decoration: underline;
+}
+
+.axis-os > .axis-os-notice {
   padding: 0 clamp(1rem, 3vw, 2rem);
 }
 
+.axis-os-screenstate {
+  padding: clamp(1.5rem, 5vw, 3rem) clamp(1rem, 3vw, 2rem);
+}
+
+.axis-os-hint {
+  padding: 0 clamp(1rem, 3vw, 2rem);
+}
+
+.axis-os-hint p {
+  border-left: 3px solid #9dff45;
+  color: rgba(246, 248, 240, 0.75);
+  font-size: 0.9rem;
+  margin: 0;
+  padding: 0.45rem 0.75rem;
+}
+
+.axis-os-flow {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 0 clamp(1rem, 3vw, 2rem);
+}
+
+.axis-os-flowstep {
+  border: 1px solid rgba(246, 248, 240, 0.14);
+  color: inherit;
+  display: grid;
+  align-content: start;
+  gap: 0.25rem;
+  min-height: 4.5rem;
+  padding: 0.6rem;
+}
+
+.axis-os-flowstep strong {
+  font-size: 0.95rem;
+}
+
+.axis-os-flowstep span {
+  color: rgba(246, 248, 240, 0.5);
+  font-size: 0.66rem;
+}
+
+.axis-os-flowstep--current {
+  border-color: #9dff45;
+  outline: 1px solid #9dff45;
+}
+
+.axis-os-flowstep--current strong {
+  color: #9dff45;
+}
+
+.axis-os-flowstep--done {
+  background: rgba(157, 255, 69, 0.08);
+}
+
+.axis-os-flowstep--done strong {
+  color: rgba(157, 255, 69, 0.75);
+}
+
+.axis-os-flowstep--next {
+  opacity: 0.7;
+}
+
 .axis-os-row {
-  align-items: baseline;
+  align-items: center;
   appearance: none;
   background: rgba(246, 248, 240, 0.05);
   border: 1px solid rgba(246, 248, 240, 0.12);
@@ -12332,6 +12454,21 @@ button.axis-review-row:focus-visible {
   color: rgba(246, 248, 240, 0.55);
   font-size: 0.82rem;
   overflow-wrap: anywhere;
+}
+
+.axis-os-row-main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.axis-os-row-go {
+  color: #9dff45;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .axis-os-modules div {
@@ -12463,53 +12600,7 @@ button.axis-review-row:focus-visible {
   color: #9dff45;
 }
 
-.axis-os-eventhead {
-  gap: 0.35rem;
-  padding-top: clamp(1.25rem, 4vw, 2rem);
-}
-
-.axis-os-eventhead h1 {
-  font-size: clamp(2rem, 7vw, 3.4rem);
-  font-weight: 900;
-  line-height: 0.95;
-  margin: 0;
-  text-transform: uppercase;
-}
-
-.axis-os-eventhead p {
-  color: rgba(246, 248, 240, 0.55);
-  font-size: 0.9rem;
-  margin: 0;
-  text-transform: capitalize;
-}
-
-.axis-os-actiongrid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.axis-os-action {
-  border: 1px solid rgba(246, 248, 240, 0.16);
-  display: grid;
-  gap: 0.3rem;
-  min-height: 5rem;
-  padding: 0.85rem 0.75rem;
-}
-
-.axis-os-action strong {
-  color: #9dff45;
-  font-size: 1.05rem;
-}
-
-.axis-os-action span {
-  color: rgba(246, 248, 240, 0.5);
-  font-size: 0.72rem;
-}
-
 /* Live marker screen */
-
-.axis-os--live {
-  grid-template-rows: auto auto 1fr auto;
-}
 
 .axis-os-livebadge {
   color: rgba(246, 248, 240, 0.4);
@@ -12520,18 +12611,50 @@ button.axis-review-row:focus-visible {
   color: #ff5c39;
 }
 
-.axis-os-clock {
-  display: grid;
-  justify-items: center;
-  padding: clamp(1rem, 4vw, 2rem) 1rem 0;
+/* Broadcast stage: the camera surface mounts here in a later release. */
+
+.axis-os-stage {
+  padding: 0 clamp(1rem, 3vw, 2rem);
 }
 
-.axis-os-clock span {
-  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: clamp(3.5rem, 16vw, 7rem);
+.axis-os-stage-surface {
+  align-content: center;
+  aspect-ratio: 16 / 10;
+  background:
+    radial-gradient(ellipse at center, rgba(246, 248, 240, 0.045), transparent 70%),
+    #020302;
+  border: 1px solid rgba(246, 248, 240, 0.14);
+  display: grid;
+  gap: 0.4rem;
+  justify-items: center;
+  position: relative;
+}
+
+.axis-os-stage-surface--live {
+  border-color: rgba(255, 92, 57, 0.55);
+}
+
+.axis-os-stage-signal {
+  color: rgba(246, 248, 240, 0.35);
+  font-size: 0.78rem;
+  letter-spacing: 0.25em;
+}
+
+.axis-os-stage-surface--live .axis-os-stage-signal {
+  color: #ff5c39;
+}
+
+.axis-os-stage-clock {
+  font-size: clamp(3rem, 14vw, 6rem);
   font-variant-numeric: tabular-nums;
-  font-weight: 900;
   line-height: 1;
+}
+
+.axis-os-stage-mark {
+  bottom: 0.6rem;
+  color: #9dff45;
+  font-size: 0.72rem;
+  position: absolute;
 }
 
 .axis-os-markgrid {
@@ -12615,17 +12738,110 @@ button.axis-review-row:focus-visible {
   cursor: default;
 }
 
-.axis-os-moment {
+/* Moment cards (review screen) */
+
+.axis-os-card {
+  background: rgba(246, 248, 240, 0.04);
+  border: 1px solid rgba(246, 248, 240, 0.12);
+  border-left-width: 3px;
   display: grid;
-  gap: 0;
+}
+
+.axis-os-card--keep {
+  border-left-color: #9dff45;
+}
+
+.axis-os-card--fix {
+  border-left-color: #ff5c39;
+}
+
+.axis-os-card--open {
+  background: rgba(246, 248, 240, 0.07);
+}
+
+.axis-os-card-head {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 0.5rem;
+  min-height: 3.25rem;
+  padding: 0.85rem 0.95rem;
+  text-align: left;
+  width: 100%;
+}
+
+.axis-os-card-title {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+}
+
+.axis-os-card-title strong {
+  font-size: 1rem;
+}
+
+.axis-os-card-title em {
+  color: rgba(246, 248, 240, 0.55);
+  font-size: 0.82rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+.axis-os-card-title > span {
+  color: rgba(246, 248, 240, 0.75);
+  font-size: 0.85rem;
+}
+
+.axis-os-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.axis-os-minichip {
+  border: 1px solid rgba(246, 248, 240, 0.18);
+  color: rgba(246, 248, 240, 0.65);
+  font-size: 0.68rem;
+  padding: 0.15rem 0.4rem;
+}
+
+.axis-os-minichip--outcome {
+  border-color: rgba(157, 255, 69, 0.4);
+  color: #9dff45;
+}
+
+.axis-os-minichip--target {
+  border-color: rgba(246, 248, 240, 0.35);
+  color: #f6f8f0;
+}
+
+.axis-os-card-note {
+  color: rgba(246, 248, 240, 0.6);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.axis-os-savedchip {
+  background: #9dff45;
+  color: #050706;
+  font-size: 0.68rem;
+  padding: 0.15rem 0.45rem;
 }
 
 .axis-os-editor {
-  border: 1px solid rgba(246, 248, 240, 0.12);
-  border-top: none;
+  border-top: 1px solid rgba(246, 248, 240, 0.12);
   display: grid;
   gap: 0.9rem;
   padding: 0.95rem;
+}
+
+.axis-os-form--flush {
+  padding: 0;
 }
 
 @media (min-width: 40rem) {

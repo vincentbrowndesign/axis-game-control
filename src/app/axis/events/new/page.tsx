@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { AxisOsHeader, AxisOsNotice } from "../../../../components/axis/AxisOsKit";
 import { AXIS_EVENT_TYPES, type AxisEventType, type AxisSourceMode } from "../../../../lib/axis-event-container";
 
 const SOURCE_MODES: Array<{ mode: AxisSourceMode; name: string; detail: string }> = [
@@ -31,7 +31,7 @@ export default function AxisEventNewPage() {
   const [teamName, setTeamName] = useState("");
   const [location, setLocation] = useState("");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ tone: "error" | "offline"; message: string } | null>(null);
 
   async function createEvent() {
     if (!title.trim() || saving) return;
@@ -48,9 +48,14 @@ export default function AxisEventNewPage() {
       headers: { "Content-Type": "application/json" },
       method: "POST",
     }).catch(() => null);
-    if (!response?.ok) {
-      const body = response ? ((await response.json().catch(() => null)) as { error?: string } | null) : null;
-      setError(body?.error ?? "Could not create the event.");
+    if (!response || response.status === 503) {
+      setError({ message: "Event memory is offline. Check Supabase configuration.", tone: "offline" });
+      setSaving(false);
+      return;
+    }
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { error?: string } | null;
+      setError({ message: body?.error ?? "Could not create the event.", tone: "error" });
       setSaving(false);
       return;
     }
@@ -62,10 +67,7 @@ export default function AxisEventNewPage() {
 
   return (
     <main className="axis-os">
-      <header className="axis-os-topbar">
-        <Link href="/axis">Axis</Link>
-        <span>New Event</span>
-      </header>
+      <AxisOsHeader backHref="/axis" backLabel="Axis" kicker="Trophy Labs" title="New Event" />
 
       <section className="axis-os-form">
         <label className="axis-os-field">
@@ -121,10 +123,10 @@ export default function AxisEventNewPage() {
           <input onChange={(input) => setLocation(input.target.value)} placeholder="Main gym" value={location} />
         </label>
 
-        {error && <p className="axis-os-error">{error}</p>}
+        {error && <AxisOsNotice tone={error.tone}>{error.message}</AxisOsNotice>}
 
         <button className="axis-os-primary" disabled={!title.trim() || saving} onClick={createEvent} type="button">
-          {saving ? "Creating…" : "Create Event"}
+          {saving ? "Creating…" : sourceMode === "record_now" ? "Create · Go Live" : "Create Event"}
         </button>
       </section>
     </main>

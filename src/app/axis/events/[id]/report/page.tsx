@@ -2,20 +2,20 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  AxisOsHeader,
+  AxisOsNotice,
+  AxisOsScreenState,
+  AxisOsSection,
+  formatAxisClock,
+} from "../../../../../components/axis/AxisOsKit";
 import type {
   AxisAccessLink,
   AxisEventContainer,
   AxisMoment,
   AxisReport,
 } from "../../../../../lib/axis-event-container";
-
-function formatClock(totalSeconds: number) {
-  const clamped = Math.max(0, Math.floor(totalSeconds));
-  const minutes = Math.floor(clamped / 60);
-  const seconds = clamped % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
 
 function toLines(items: string[]) {
   return items.join("\n");
@@ -31,6 +31,7 @@ function fromLines(value: string) {
 export default function AxisEventReportPage() {
   const params = useParams<{ id: string }>();
   const eventId = params.id;
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error" | "offline">("loading");
   const [event, setEvent] = useState<AxisEventContainer | null>(null);
   const [moments, setMoments] = useState<AxisMoment[]>([]);
   const [report, setReport] = useState<AxisReport | null>(null);
@@ -46,22 +47,32 @@ export default function AxisEventReportPage() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const savedTimer = useRef<number | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const response = await fetch(`/api/axis/events/${eventId}`).catch(() => null);
       if (cancelled) return;
-      if (!response?.ok) {
-        setError("Could not load this event.");
+      if (!response || response.status === 503) {
+        setLoadState("offline");
         return;
       }
-      const body = (await response.json()) as {
+      if (!response.ok) {
+        setLoadState("error");
+        return;
+      }
+      const body = (await response.json().catch(() => null)) as {
         accessLinks: AxisAccessLink[];
         event: AxisEventContainer;
         moments: AxisMoment[];
         reports: AxisReport[];
-      };
+      } | null;
       if (cancelled) return;
+      if (!body?.event) {
+        setLoadState("error");
+        return;
+      }
       setEvent(body.event);
       setMoments(body.moments);
       setLinks(body.accessLinks);
@@ -74,16 +85,24 @@ export default function AxisEventReportPage() {
         setNextFocus(existing.next_focus ?? "");
         setEvidenceIds((existing.evidence ?? []).map((item) => item.moment_id));
       }
+      setLoadState("ready");
     })();
     return () => {
       cancelled = true;
     };
   }, [eventId]);
 
+  useEffect(() => {
+    return () => {
+      if (savedTimer.current) window.clearTimeout(savedTimer.current);
+    };
+  }, []);
+
   async function saveReport() {
     if (busy) return;
     setBusy(true);
     setSaved(false);
+    setError(null);
     const response = await fetch(`/api/axis/events/${eventId}/report`, {
       body: JSON.stringify({
         corrections: fromLines(corrections),
@@ -105,12 +124,14 @@ export default function AxisEventReportPage() {
     const body = (await response.json()) as { report: AxisReport };
     setReport(body.report);
     setSaved(true);
-    setError(null);
+    if (savedTimer.current) window.clearTimeout(savedTimer.current);
+    savedTimer.current = window.setTimeout(() => setSaved(false), 2500);
   }
 
   async function addLink() {
     if (!linkLabel.trim() || !linkUrl.trim() || busy) return;
     setBusy(true);
+    setError(null);
     const cents = Math.round(Number.parseFloat(linkPrice) * 100);
     const response = await fetch("/api/axis/access-links", {
       body: JSON.stringify({
@@ -136,96 +157,123 @@ export default function AxisEventReportPage() {
     setLinkPrice("");
   }
 
+  if (!event) {
+    return (
+      <AxisOsScreenState
+        backHref={`/axis/events/${eventId}`}
+        title="Report"
+        tone={loadState === "loading" ? "loading" : loadState === "offline" ? "offline" : "error"}
+      >
+        {loadState === "loading" && "Loading report…"}
+        {loadState === "offline" && "Event memory is offline. Check Supabase configuration."}
+        {loadState === "error" && "Could not load this event."}
+      </AxisOsScreenState>
+    );
+  }
+
   return (
     <main className="axis-os">
-      <header className="axis-os-topbar">
-        <Link href={`/axis/events/${eventId}`}>{event?.title ?? "Event"}</Link>
-        <span>Report</span>
-      </header>
+      <AxisOsHeader
+        backHref={`/axis/events/${eventId}`}
+        backLabel={event.title}
+        title="Package"
+        right={saved ? <span className="axis-os-savedchip">Saved</span> : undefined}
+      />
 
-      <section className="axis-os-form">
-        <label className="axis-os-field">
-          <span>Summary</span>
-          <textarea
-            onChange={(input) => setSummary(input.target.value)}
-            placeholder="What this event produced"
-            rows={3}
-            value={summary}
-          />
-        </label>
-
-        <label className="axis-os-field">
-          <span>Strengths (one per line)</span>
-          <textarea
-            onChange={(input) => setStrengths(input.target.value)}
-            placeholder={"Pull-up footwork held under pressure"}
-            rows={3}
-            value={strengths}
-          />
-        </label>
-
-        <label className="axis-os-field">
-          <span>Corrections (one per line)</span>
-          <textarea
-            onChange={(input) => setCorrections(input.target.value)}
-            placeholder={"Landing drifts right on closeouts"}
-            rows={3}
-            value={corrections}
-          />
-        </label>
-
-        <label className="axis-os-field">
-          <span>Next focus</span>
-          <input
-            onChange={(input) => setNextFocus(input.target.value)}
-            placeholder="Two-foot landings this week"
-            value={nextFocus}
-          />
-        </label>
-
-        <div className="axis-os-field">
-          <span>Evidence moments</span>
-          <div className="axis-os-chiprow">
-            {!moments.length && <p className="axis-os-empty">No moments to attach yet.</p>}
-            {moments.map((moment) => (
-              <button
-                className={evidenceIds.includes(moment.id) ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
-                key={moment.id}
-                onClick={() =>
-                  setEvidenceIds((current) =>
-                    current.includes(moment.id)
-                      ? current.filter((momentId) => momentId !== moment.id)
-                      : [...current, moment.id],
-                  )
-                }
-                type="button"
-              >
-                {moment.ui_label} {formatClock(moment.timestamp_seconds)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button className="axis-os-primary" disabled={busy} onClick={saveReport} type="button">
-          {report ? "Save Report" : "Create Report"}
-        </button>
-        {saved && <p className="axis-os-empty">Report saved.</p>}
+      <section className="axis-os-hint">
+        <p>One packaging step: build the report, then attach the access link.</p>
       </section>
 
-      <section className="axis-os-list" aria-label="Access links">
-        <h2>Access</h2>
+      <AxisOsSection label="Report" title="1 · Report">
+        <div className="axis-os-form axis-os-form--flush">
+          <label className="axis-os-field">
+            <span>Summary</span>
+            <textarea
+              onChange={(input) => setSummary(input.target.value)}
+              placeholder="What this event produced"
+              rows={3}
+              value={summary}
+            />
+          </label>
+
+          <label className="axis-os-field">
+            <span>Strengths (one per line)</span>
+            <textarea
+              onChange={(input) => setStrengths(input.target.value)}
+              placeholder={"Pull-up footwork held under pressure"}
+              rows={3}
+              value={strengths}
+            />
+          </label>
+
+          <label className="axis-os-field">
+            <span>Corrections (one per line)</span>
+            <textarea
+              onChange={(input) => setCorrections(input.target.value)}
+              placeholder={"Landing drifts right on closeouts"}
+              rows={3}
+              value={corrections}
+            />
+          </label>
+
+          <label className="axis-os-field">
+            <span>Next focus</span>
+            <input
+              onChange={(input) => setNextFocus(input.target.value)}
+              placeholder="Two-foot landings this week"
+              value={nextFocus}
+            />
+          </label>
+
+          <div className="axis-os-field">
+            <span>Evidence moments</span>
+            {!moments.length && <AxisOsNotice tone="empty">No moments to attach yet.</AxisOsNotice>}
+            <div className="axis-os-chiprow">
+              {moments.map((moment) => (
+                <button
+                  className={evidenceIds.includes(moment.id) ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
+                  key={moment.id}
+                  onClick={() =>
+                    setEvidenceIds((current) =>
+                      current.includes(moment.id)
+                        ? current.filter((momentId) => momentId !== moment.id)
+                        : [...current, moment.id],
+                    )
+                  }
+                  type="button"
+                >
+                  {moment.ui_label} {formatAxisClock(moment.timestamp_seconds)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button className="axis-os-primary" disabled={busy} onClick={saveReport} type="button">
+            {busy ? "Saving…" : report ? "Save Report" : "Create Report"}
+          </button>
+        </div>
+      </AxisOsSection>
+
+      <AxisOsSection label="Access" title="2 · Access">
+        {!links.length && <AxisOsNotice tone="empty">No access links yet. Attach one to sell or share.</AxisOsNotice>}
         {links.map((link) => (
           <a className="axis-os-row" href={link.url} key={link.id} rel="noreferrer" target="_blank">
-            <strong>{link.label}</strong>
-            <span>
-              {link.target_type}
-              {typeof link.price_cents === "number" ? ` · $${(link.price_cents / 100).toFixed(2)}` : ""}
-            </span>
+            <div className="axis-os-row-main">
+              <strong>{link.label}</strong>
+              <span>{link.target_type}</span>
+            </div>
+            {typeof link.price_cents === "number" && (
+              <em className="axis-os-row-go">${(link.price_cents / 100).toFixed(2)}</em>
+            )}
           </a>
         ))}
         <div className="axis-os-inline">
           <input onChange={(input) => setLinkLabel(input.target.value)} placeholder="Link label" value={linkLabel} />
-          <input onChange={(input) => setLinkUrl(input.target.value)} placeholder="Payment or access URL" value={linkUrl} />
+          <input
+            onChange={(input) => setLinkUrl(input.target.value)}
+            placeholder="Payment or access URL"
+            value={linkUrl}
+          />
           <input
             inputMode="decimal"
             onChange={(input) => setLinkPrice(input.target.value)}
@@ -236,9 +284,13 @@ export default function AxisEventReportPage() {
             Attach Link
           </button>
         </div>
-      </section>
+      </AxisOsSection>
 
-      {error && <p className="axis-os-error">{error}</p>}
+      {error && <AxisOsNotice tone="error">{error}</AxisOsNotice>}
+
+      <footer className="axis-os-livefooter">
+        <Link href={`/axis/events/${eventId}`}>Done · Back to Event</Link>
+      </footer>
     </main>
   );
 }

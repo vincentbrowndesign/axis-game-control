@@ -1,23 +1,18 @@
 "use client";
 
-import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
-import type {
-  AxisAccessLink,
-  AxisEventContainer,
-  AxisEventMedia,
-  AxisEventPlayer,
-  AxisMoment,
-} from "../../../../lib/axis-event-container";
-
-type EventDetail = {
-  accessLinks: AxisAccessLink[];
-  event: AxisEventContainer;
-  media: AxisEventMedia[];
-  moments: AxisMoment[];
-  players: AxisEventPlayer[];
-};
+import { useState } from "react";
+import {
+  AxisOsFlow,
+  type AxisOsFlowStep,
+  AxisOsHeader,
+  AxisOsNotice,
+  AxisOsScreenState,
+  AxisOsSection,
+  AxisOsStatusChip,
+} from "../../../../components/axis/AxisOsKit";
+import type { AxisEventContainer, AxisEventMedia, AxisEventPlayer } from "../../../../lib/axis-event-container";
+import { useAxisEventDetail } from "../../../../lib/use-axis-event-detail";
 
 const MEDIA_KIND_BY_SOURCE: Record<string, string> = {
   attach_stream: "stream",
@@ -25,42 +20,40 @@ const MEDIA_KIND_BY_SOURCE: Record<string, string> = {
   record_now: "recording",
 };
 
+function statusRank(status: AxisEventContainer["status"]) {
+  if (status === "draft") return 0;
+  if (status === "recording" || status === "live") return 1;
+  if (status === "review" || status === "processing") return 2;
+  return 3;
+}
+
+function nextStepHint(event: AxisEventContainer, momentCount: number) {
+  const rank = statusRank(event.status);
+  if (rank === 0) {
+    return event.source_mode === "record_now"
+      ? "Next: go live and mark KEEP / FIX."
+      : "Next: attach media, then open Live to mark moments.";
+  }
+  if (rank === 1) return "Live now. Mark KEEP / FIX as it happens.";
+  if (rank === 2) {
+    return momentCount ? "Next: tag moments, then build the report." : "No moments yet. Go live to mark some.";
+  }
+  return "Saved to memory. Share access or start the next event.";
+}
+
 export default function AxisEventDetailPage() {
   const params = useParams<{ id: string }>();
   const eventId = params.id;
-  const [detail, setDetail] = useState<EventDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { detail, mutate, state } = useAxisEventDetail(eventId);
   const [mediaUrl, setMediaUrl] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const response = await fetch(`/api/axis/events/${eventId}`).catch(() => null);
-      if (cancelled) return;
-      if (!response?.ok) {
-        setError("Could not load this event.");
-        return;
-      }
-      const body = (await response.json()) as EventDetail;
-      if (cancelled) return;
-      setDetail(body);
-      setError(null);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [eventId, reloadKey]);
-
-  function reload() {
-    setReloadKey((key) => key + 1);
-  }
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function attachMedia() {
     if (!detail || !mediaUrl.trim() || busy) return;
     setBusy(true);
+    setActionError(null);
     const response = await fetch(`/api/axis/events/${eventId}/media`, {
       body: JSON.stringify({
         kind: MEDIA_KIND_BY_SOURCE[detail.event.source_mode] ?? "upload",
@@ -71,16 +64,18 @@ export default function AxisEventDetailPage() {
     }).catch(() => null);
     setBusy(false);
     if (!response?.ok) {
-      setError("Could not attach media.");
+      setActionError("Could not attach media.");
       return;
     }
+    const body = (await response.json()) as { media: AxisEventMedia };
+    mutate((current) => ({ ...current, media: [...current.media, body.media] }));
     setMediaUrl("");
-    reload();
   }
 
   async function addPlayer() {
     if (!playerName.trim() || busy) return;
     setBusy(true);
+    setActionError(null);
     const response = await fetch(`/api/axis/events/${eventId}/players`, {
       body: JSON.stringify({ display_name: playerName }),
       headers: { "Content-Type": "application/json" },
@@ -88,89 +83,97 @@ export default function AxisEventDetailPage() {
     }).catch(() => null);
     setBusy(false);
     if (!response?.ok) {
-      setError("Could not add the player.");
+      setActionError("Could not add the player.");
       return;
     }
+    const body = (await response.json()) as { eventPlayer: AxisEventPlayer };
+    mutate((current) => ({ ...current, players: [...current.players, body.eventPlayer] }));
     setPlayerName("");
-    reload();
   }
 
   async function markReady() {
     if (busy) return;
     setBusy(true);
-    await fetch(`/api/axis/events/${eventId}`, {
+    setActionError(null);
+    const response = await fetch(`/api/axis/events/${eventId}`, {
       body: JSON.stringify({ status: "ready" }),
       headers: { "Content-Type": "application/json" },
       method: "PATCH",
     }).catch(() => null);
     setBusy(false);
-    reload();
+    if (!response?.ok) {
+      setActionError("Could not mark the event ready.");
+      return;
+    }
+    const body = (await response.json()) as { event: AxisEventContainer };
+    mutate((current) => ({ ...current, event: body.event }));
   }
 
-  if (error && !detail) {
-    return (
-      <main className="axis-os">
-        <header className="axis-os-topbar">
-          <Link href="/axis">Axis</Link>
-        </header>
-        <p className="axis-os-empty">{error}</p>
-      </main>
-    );
-  }
   if (!detail) {
     return (
-      <main className="axis-os">
-        <header className="axis-os-topbar">
-          <Link href="/axis">Axis</Link>
-        </header>
-        <p className="axis-os-empty">Loading event…</p>
-      </main>
+      <AxisOsScreenState backHref="/axis" title="Event" tone={state === "loading" ? "loading" : state === "offline" ? "offline" : "error"}>
+        {state === "loading" && "Loading event…"}
+        {state === "offline" && "Event memory is offline. Check Supabase configuration."}
+        {state === "error" && "Could not load this event."}
+      </AxisOsScreenState>
     );
   }
 
-  const keeps = detail.moments.filter((moment) => moment.ui_label === "KEEP").length;
-  const fixes = detail.moments.length - keeps;
+  const { event, media, moments, players, reports } = detail;
+  const keeps = moments.filter((moment) => moment.ui_label === "KEEP").length;
+  const fixes = moments.length - keeps;
+  const rank = statusRank(event.status);
+
+  const flow: AxisOsFlowStep[] = [
+    {
+      detail: "Keep / Fix",
+      href: `/axis/events/${eventId}/record`,
+      label: "Live",
+      state: rank === 1 ? "current" : rank > 1 ? "done" : "next",
+    },
+    {
+      detail: moments.length ? `${keeps} keep · ${fixes} fix` : "Tag moments",
+      href: `/axis/events/${eventId}/review`,
+      label: "Review",
+      state: rank === 2 ? "current" : rank > 2 ? "done" : "next",
+    },
+    {
+      detail: reports.length ? "Draft saved" : "Package",
+      href: `/axis/events/${eventId}/report`,
+      label: "Report",
+      state: reports.length ? (rank > 2 ? "done" : "current") : rank >= 2 ? "current" : "next",
+    },
+    {
+      detail: "Memory",
+      label: "Ready",
+      state: rank >= 3 ? "done" : "next",
+    },
+  ];
 
   return (
     <main className="axis-os">
-      <header className="axis-os-topbar">
-        <Link href="/axis">Axis</Link>
-        <span>{detail.event.status}</span>
-      </header>
+      <AxisOsHeader
+        backHref="/axis"
+        backLabel="Axis"
+        kicker={`${event.event_type.replace("_", " ")}${event.team_name ? ` · ${event.team_name}` : ""}`}
+        title={event.title}
+        right={<AxisOsStatusChip label={event.status} tone={rank === 1 ? "live" : rank === 3 ? "ready" : "idle"} />}
+      />
 
-      <section className="axis-os-eventhead">
-        <h1>{detail.event.title}</h1>
-        <p>
-          {detail.event.event_type.replace("_", " ")}
-          {detail.event.team_name ? ` · ${detail.event.team_name}` : ""}
-          {detail.event.location ? ` · ${detail.event.location}` : ""}
-        </p>
+      <section className="axis-os-hint">
+        <p>{nextStepHint(event, moments.length)}</p>
       </section>
 
-      <section className="axis-os-actiongrid">
-        <Link className="axis-os-action" href={`/axis/events/${eventId}/record`}>
-          <strong>Live</strong>
-          <span>Mark KEEP / FIX moments</span>
-        </Link>
-        <Link className="axis-os-action" href={`/axis/events/${eventId}/review`}>
-          <strong>Review</strong>
-          <span>
-            {keeps} keep · {fixes} fix
-          </span>
-        </Link>
-        <Link className="axis-os-action" href={`/axis/events/${eventId}/report`}>
-          <strong>Report</strong>
-          <span>Summary, corrections, access</span>
-        </Link>
-      </section>
+      <AxisOsFlow steps={flow} />
 
-      <section className="axis-os-list" aria-label="Media">
-        <h2>Media</h2>
-        {!detail.media.length && <p className="axis-os-empty">No media attached yet.</p>}
-        {detail.media.map((media) => (
-          <a className="axis-os-row" href={media.url ?? "#"} key={media.id} rel="noreferrer" target="_blank">
-            <strong>{media.kind}</strong>
-            <span>{media.url}</span>
+      <AxisOsSection label="Media">
+        {!media.length && <AxisOsNotice tone="empty">No media attached yet.</AxisOsNotice>}
+        {media.map((item) => (
+          <a className="axis-os-row" href={item.url ?? "#"} key={item.id} rel="noreferrer" target="_blank">
+            <div className="axis-os-row-main">
+              <strong>{item.kind}</strong>
+              <span>{item.url}</span>
+            </div>
           </a>
         ))}
         <div className="axis-os-inline">
@@ -183,15 +186,16 @@ export default function AxisEventDetailPage() {
             Attach
           </button>
         </div>
-      </section>
+      </AxisOsSection>
 
-      <section className="axis-os-list" aria-label="Players">
-        <h2>Players</h2>
-        {!detail.players.length && <p className="axis-os-empty">No players attached yet.</p>}
-        {detail.players.map((player) => (
+      <AxisOsSection label="Players">
+        {!players.length && <AxisOsNotice tone="empty">No players attached yet.</AxisOsNotice>}
+        {players.map((player) => (
           <div className="axis-os-row" key={player.id}>
-            <strong>{player.display_name}</strong>
-            <span>{player.jersey_number ? `#${player.jersey_number}` : "—"}</span>
+            <div className="axis-os-row-main">
+              <strong>{player.display_name}</strong>
+              <span>{player.jersey_number ? `#${player.jersey_number}` : "—"}</span>
+            </div>
           </div>
         ))}
         <div className="axis-os-inline">
@@ -200,16 +204,17 @@ export default function AxisEventDetailPage() {
             Add
           </button>
         </div>
-      </section>
+      </AxisOsSection>
 
-      {detail.event.status !== "ready" && detail.event.status !== "archived" && (
-        <section className="axis-os-list">
+      {actionError && <AxisOsNotice tone="error">{actionError}</AxisOsNotice>}
+
+      {rank < 3 && (
+        <section className="axis-os-list" aria-label="Finish">
           <button className="axis-os-primary axis-os-primary--quiet" disabled={busy} onClick={markReady} type="button">
             Mark Event Ready
           </button>
         </section>
       )}
-      {error && <p className="axis-os-error">{error}</p>}
     </main>
   );
 }
