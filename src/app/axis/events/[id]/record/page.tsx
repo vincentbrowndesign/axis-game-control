@@ -3,6 +3,10 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
+  AxisCameraPreview,
+  type AxisCameraState,
+} from "../../../../../components/axis/AxisCameraPreview";
+import {
   AxisOsHeader,
   AxisOsNotice,
   AxisOsScreenState,
@@ -20,6 +24,7 @@ export default function AxisEventRecordPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastMark, setLastMark] = useState<string | null>(null);
+  const [cameraState, setCameraState] = useState<AxisCameraState>("off");
   const lastMarkTimer = useRef<number | null>(null);
 
   const event = detail?.event ?? null;
@@ -118,12 +123,21 @@ export default function AxisEventRecordPage() {
         }
       />
 
-      {/* Camera surface lands here in a later release; the stage keeps its slot. */}
+      {/* Preview only: the stage shows the camera but nothing is recorded or saved. */}
       <section className="axis-os-stage" aria-label="Broadcast stage">
-        <div className={live ? "axis-os-stage-surface axis-os-stage-surface--live" : "axis-os-stage-surface"}>
+        <div
+          className={[
+            "axis-os-stage-surface",
+            live ? "axis-os-stage-surface--live" : "",
+            cameraState === "ready" ? "axis-os-stage-surface--camera" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           <span className="axis-os-stage-signal">{live ? "AXIS LIVE" : "STANDBY"}</span>
           <span className="axis-os-stage-clock">{live ? formatAxisClock(elapsed) : "00:00"}</span>
           {lastMark && <span className="axis-os-stage-mark">{lastMark}</span>}
+          <AxisCameraPreview onStateChange={setCameraState} />
         </div>
       </section>
 

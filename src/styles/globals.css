@@ -12203,6 +12203,8 @@ button.axis-review-row:focus-visible {
 .axis-os-stage-signal,
 .axis-os-stage-clock,
 .axis-os-stage-mark,
+.axis-os-stage-camera-status,
+.axis-os-stage-camera-button,
 .axis-os-savedchip,
 .axis-os-livefooter a,
 .axis-os-livefooter button,
@@ -12627,6 +12629,7 @@ button.axis-review-row:focus-visible {
   display: grid;
   gap: 0.4rem;
   justify-items: center;
+  overflow: hidden;
   position: relative;
 }
 
@@ -12634,10 +12637,27 @@ button.axis-review-row:focus-visible {
   border-color: rgba(255, 92, 57, 0.55);
 }
 
+.axis-os-stage-video {
+  background: #000;
+  display: none;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+  z-index: 0;
+}
+
+.axis-os-stage-surface--camera .axis-os-stage-video {
+  display: block;
+}
+
 .axis-os-stage-signal {
   color: rgba(246, 248, 240, 0.35);
   font-size: 0.78rem;
   letter-spacing: 0.25em;
+  position: relative;
+  z-index: 1;
 }
 
 .axis-os-stage-surface--live .axis-os-stage-signal {
@@ -12648,13 +12668,71 @@ button.axis-review-row:focus-visible {
   font-size: clamp(3rem, 14vw, 6rem);
   font-variant-numeric: tabular-nums;
   line-height: 1;
+  position: relative;
+  z-index: 1;
 }
 
 .axis-os-stage-mark {
   bottom: 0.6rem;
   color: #9dff45;
   font-size: 0.72rem;
+  left: 0;
   position: absolute;
+  right: 0;
+  text-align: center;
+  z-index: 1;
+}
+
+.axis-os-stage-camera-status {
+  color: rgba(246, 248, 240, 0.5);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  padding: 0 1rem;
+  position: relative;
+  text-align: center;
+  z-index: 1;
+}
+
+.axis-os-stage-camera-button {
+  appearance: none;
+  background: rgba(5, 7, 6, 0.65);
+  border: 1px solid rgba(246, 248, 240, 0.35);
+  border-radius: 0;
+  bottom: 0.6rem;
+  color: #f6f8f0;
+  cursor: pointer;
+  font-size: 0.72rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.7rem;
+  position: absolute;
+  right: 0.6rem;
+  z-index: 2;
+}
+
+.axis-os-stage-camera-button:disabled {
+  color: rgba(246, 248, 240, 0.45);
+  cursor: default;
+}
+
+/* Camera on: overlays move to broadcast HUD corners over the video. */
+
+.axis-os-stage-surface--camera .axis-os-stage-signal {
+  left: 0.75rem;
+  position: absolute;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85);
+  top: 0.7rem;
+}
+
+.axis-os-stage-surface--camera .axis-os-stage-clock {
+  font-size: clamp(1.5rem, 6vw, 2.4rem);
+  position: absolute;
+  right: 0.75rem;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85);
+  top: 0.55rem;
+}
+
+.axis-os-stage-surface--camera .axis-os-stage-mark {
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85);
 }
 
 .axis-os-markgrid {
