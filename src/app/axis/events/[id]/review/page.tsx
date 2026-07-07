@@ -96,7 +96,7 @@ export default function AxisEventReviewPage() {
     return (
       <AxisOsScreenState
         backHref={`/axis/events/${eventId}`}
-        title="Review"
+        title="Moments"
         tone={state === "loading" ? "loading" : state === "offline" ? "offline" : "error"}
       >
         {state === "loading" && "Loading moments…"}
@@ -116,7 +116,7 @@ export default function AxisEventReviewPage() {
       <AxisOsHeader
         backHref={`/axis/events/${eventId}`}
         backLabel={event.title}
-        title="Review"
+        title="Moments"
         right={<AxisOsStatusChip label={`${tagged}/${moments.length} tagged`} tone={tagged === moments.length && moments.length > 0 ? "ready" : "idle"} />}
       />
 
@@ -259,7 +259,7 @@ export default function AxisEventReviewPage() {
       {error && <AxisOsNotice tone="error">{error}</AxisOsNotice>}
 
       <footer className="axis-os-livefooter">
-        <Link href={`/axis/events/${eventId}/report`}>Build Report →</Link>
+        <Link href={`/axis/events/${eventId}/report`}>Build Package →</Link>
       </footer>
     </main>
   );

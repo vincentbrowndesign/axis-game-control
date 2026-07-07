@@ -8,16 +8,11 @@ import {
   AxisOsSection,
   AxisOsStatusChip,
 } from "../../components/axis/AxisOsKit";
-import type { AxisAccessLink, AxisEventContainer } from "../../lib/axis-event-container";
-
-const MODULES = [
-  { name: "Film", detail: "Video, replay, clips, report evidence" },
-  { name: "Live", detail: "Capture, stream source, live markers" },
-  { name: "Calibrate", detail: "Movement, footwork, body thresholds" },
-  { name: "Studio", detail: "Reels, captions, sponsor recaps" },
-  { name: "Intelligence", detail: "Tags, history, event memory" },
-  { name: "Access", detail: "Paid links, clip packs, media passes" },
-];
+import {
+  AXIS_EVENT_STATE_LABELS,
+  type AxisAccessLink,
+  type AxisEventContainer,
+} from "../../lib/axis-event-container";
 
 const SOURCE_LABELS: Record<string, string> = {
   attach_stream: "Stream",
@@ -31,7 +26,7 @@ function continueTarget(event: AxisEventContainer): { href: string; label: strin
     return { href: `/axis/events/${event.id}/record`, label: "Live now →" };
   }
   if (event.status === "review") {
-    return { href: `/axis/events/${event.id}/review`, label: "Review moments →" };
+    return { href: `/axis/events/${event.id}/review`, label: "Tag moments →" };
   }
   if (event.status === "draft" && event.source_mode === "record_now") {
     return { href: `/axis/events/${event.id}/record`, label: "Go live →" };
@@ -81,14 +76,13 @@ export default function AxisDashboardPage() {
       <AxisOsHeader
         kicker="Trophy Labs"
         title="Axis"
-        right={<span className="axis-os-tagline">Basketball performance intelligence</span>}
+        right={<span className="axis-os-tagline">Events in. Film, proof, memory out.</span>}
       />
 
       <section className="axis-os-hero">
         <Link className="axis-os-primary" href="/axis/events/new">
           Start Axis Event
         </Link>
-        <p>Turn one event into film, data, reports, access, and player memory.</p>
       </section>
 
       <AxisOsSection label="Active events" title="Active">
@@ -106,7 +100,7 @@ export default function AxisDashboardPage() {
                 <div className="axis-os-row-main">
                   <strong>{event.title}</strong>
                   <span>
-                    {SOURCE_LABELS[event.source_mode] ?? event.source_mode} · {event.status}
+                    {SOURCE_LABELS[event.source_mode] ?? event.source_mode} · {AXIS_EVENT_STATE_LABELS[event.status]}
                   </span>
                 </div>
                 <em className="axis-os-row-go">{target.label}</em>
@@ -124,41 +118,35 @@ export default function AxisDashboardPage() {
                 <strong>{event.title}</strong>
                 <span>{SOURCE_LABELS[event.source_mode] ?? event.source_mode}</span>
               </div>
-              <AxisOsStatusChip label={event.status} tone={event.status === "ready" ? "ready" : "idle"} />
+              <AxisOsStatusChip
+                label={AXIS_EVENT_STATE_LABELS[event.status]}
+                tone={event.status === "ready" ? "ready" : "idle"}
+              />
             </Link>
           ))}
       </AxisOsSection>
 
-      <AxisOsSection label="Access links" title="Money Links">
-        {state === "ready" && !links.length && (
-          <AxisOsNotice tone="empty">Access and payment links land here.</AxisOsNotice>
-        )}
-        {links.map((link) => (
-          <a className="axis-os-row" href={link.url} key={link.id} rel="noreferrer" target="_blank">
-            <div className="axis-os-row-main">
-              <strong>{link.label}</strong>
-              <span>
-                {link.target_type} · {link.access_level}
-              </span>
-            </div>
-            {typeof link.price_cents === "number" && (
-              <em className="axis-os-row-go">${(link.price_cents / 100).toFixed(2)}</em>
-            )}
-          </a>
-        ))}
-      </AxisOsSection>
-
-      <section className="axis-os-modules" aria-label="Product modules">
-        <h2>Axis System</h2>
-        <div>
-          {MODULES.map((module) => (
-            <article key={module.name}>
-              <strong>Axis {module.name}</strong>
-              <p>{module.detail}</p>
-            </article>
+      {links.length > 0 && (
+        <AxisOsSection label="Access links" title="Money Links">
+          {links.map((link) => (
+            <a className="axis-os-row" href={link.url} key={link.id} rel="noreferrer" target="_blank">
+              <div className="axis-os-row-main">
+                <strong>{link.label}</strong>
+                <span>
+                  {link.target_type} · {link.access_level}
+                </span>
+              </div>
+              {typeof link.price_cents === "number" && (
+                <em className="axis-os-row-go">${(link.price_cents / 100).toFixed(2)}</em>
+              )}
+            </a>
           ))}
-        </div>
-      </section>
+        </AxisOsSection>
+      )}
+
+      <footer className="axis-os-quietfooter">
+        <Link href="/axis/lab">Axis Lab →</Link>
+      </footer>
     </main>
   );
 }

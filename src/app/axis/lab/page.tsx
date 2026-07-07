@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { axisCapabilityRegistry } from "../../../axis/core/capability-registry";
 import { axisReleaseManifest } from "../../../axis/core/release-manifest";
 
@@ -14,8 +15,20 @@ export default function AxisLabPage() {
         <p>Axis Lab</p>
         <h1>Capability registry</h1>
         <span>Debug, provider, and release details stay here.</span>
-        <a href="/axis/lab/shell">Open legacy session shell</a>
       </header>
+
+      <section aria-label="Experiments">
+        <article>
+          <span>Experiments</span>
+          <strong>Internal tools and future capabilities</strong>
+          <p>
+            <Link href="/axis/lab/shell">Session Shell</Link> · <Link href="/axis/calibrate">Calibrate</Link> ·{" "}
+            <Link href="/axis/vision">Vision</Link> · <Link href="/axis/instrument">Instrument</Link> ·{" "}
+            <Link href="/axis/clip-room">Clip Room</Link> · <Link href="/axis/lab/datasets">Datasets</Link> ·{" "}
+            <Link href="/axis/lab/dataset-review">Dataset Review</Link>
+          </p>
+        </article>
+      </section>
 
       <section aria-label="Release path">
         {axisReleaseManifest.map((release) => (

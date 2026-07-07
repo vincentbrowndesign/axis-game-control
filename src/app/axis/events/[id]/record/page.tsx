@@ -176,7 +176,7 @@ export default function AxisEventRecordPage() {
       {live && (
         <footer className="axis-os-livefooter">
           <button disabled={busy} onClick={endLive} type="button">
-            End Live · Review
+            End Live · Moments
           </button>
         </footer>
       )}

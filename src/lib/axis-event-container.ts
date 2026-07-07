@@ -80,6 +80,18 @@ export const AXIS_ACCESS_LEVELS = ["free", "paid", "private", "team", "player", 
 export type AxisEventType = (typeof AXIS_EVENT_TYPES)[number];
 export type AxisSourceMode = (typeof AXIS_SOURCE_MODES)[number];
 export type AxisEventStatus = (typeof AXIS_EVENT_STATUSES)[number];
+
+// User-facing event states (see docs/product/axis_product_architecture_v01.md).
+// The UI speaks these; raw statuses stay in the database and API.
+export const AXIS_EVENT_STATE_LABELS: Record<AxisEventStatus, string> = {
+  archived: "Archived",
+  draft: "Draft",
+  live: "Live",
+  processing: "Packaging",
+  ready: "Ready",
+  recording: "Live",
+  review: "Moments",
+};
 export type AxisMomentIntent = "asset" | "coaching";
 export type AxisMomentLabel = "KEEP" | "FIX";
 

@@ -12253,8 +12253,8 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-tagline {
-  color: rgba(246, 248, 240, 0.45);
-  font-size: 0.7rem;
+  color: rgba(246, 248, 240, 0.55);
+  font-size: 0.72rem;
   max-width: 11rem;
   text-align: right;
 }
@@ -12322,7 +12322,6 @@ button.axis-review-row:focus-visible {
 
 .axis-os-list,
 .axis-os-form,
-.axis-os-modules,
 .axis-os-liveactions {
   display: grid;
   gap: 0.6rem;
@@ -12330,8 +12329,8 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os h2 {
-  color: #9dff45;
-  font-size: 0.78rem;
+  color: rgba(246, 248, 240, 0.55);
+  font-size: 0.8rem;
   margin: 0.4rem 0 0;
 }
 
@@ -12342,7 +12341,7 @@ button.axis-review-row:focus-visible {
 
 .axis-os-notice--loading,
 .axis-os-notice--empty {
-  color: rgba(246, 248, 240, 0.45);
+  color: rgba(246, 248, 240, 0.6);
 }
 
 .axis-os-notice--error {
@@ -12385,7 +12384,9 @@ button.axis-review-row:focus-visible {
 .axis-os-flow {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-columns: minmax(5.75rem, 1fr);
+  grid-auto-flow: column;
+  overflow-x: auto;
   padding: 0 clamp(1rem, 3vw, 2rem);
 }
 
@@ -12404,8 +12405,8 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-flowstep span {
-  color: rgba(246, 248, 240, 0.5);
-  font-size: 0.66rem;
+  color: rgba(246, 248, 240, 0.62);
+  font-size: 0.68rem;
 }
 
 .axis-os-flowstep--current {
@@ -12453,8 +12454,8 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-row span {
-  color: rgba(246, 248, 240, 0.55);
-  font-size: 0.82rem;
+  color: rgba(246, 248, 240, 0.65);
+  font-size: 0.84rem;
   overflow-wrap: anywhere;
 }
 
@@ -12473,31 +12474,15 @@ button.axis-review-row:focus-visible {
   white-space: nowrap;
 }
 
-.axis-os-modules div {
-  display: grid;
-  gap: 0.6rem;
-  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+.axis-os-quietfooter {
+  display: flex;
+  justify-content: flex-end;
+  padding: 1rem clamp(1rem, 3vw, 2rem) 0;
 }
 
-.axis-os-modules article {
-  border: 1px solid rgba(246, 248, 240, 0.12);
-  display: grid;
-  gap: 0.3rem;
-  padding: 0.85rem 0.95rem;
-}
-
-.axis-os-modules article strong {
-  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
-  font-size: 0.92rem;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.axis-os-modules article p {
-  color: rgba(246, 248, 240, 0.5);
-  font-size: 0.78rem;
-  line-height: 1.35;
-  margin: 0;
+.axis-os-quietfooter a {
+  color: rgba(246, 248, 240, 0.55);
+  font-size: 0.8rem;
 }
 
 .axis-os-form {
@@ -12511,7 +12496,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-field > span {
-  color: #9dff45;
+  color: rgba(246, 248, 240, 0.65);
   font-size: 0.78rem;
 }
 
@@ -12588,7 +12573,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-source p {
-  color: rgba(246, 248, 240, 0.5);
+  color: rgba(246, 248, 240, 0.62);
   font-size: 0.8rem;
   margin: 0;
 }
@@ -12653,7 +12638,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-stage-signal {
-  color: rgba(246, 248, 240, 0.35);
+  color: rgba(246, 248, 240, 0.55);
   font-size: 0.78rem;
   letter-spacing: 0.25em;
   position: relative;
@@ -12864,7 +12849,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-card-title em {
-  color: rgba(246, 248, 240, 0.55);
+  color: rgba(246, 248, 240, 0.65);
   font-size: 0.82rem;
   font-style: normal;
   font-variant-numeric: tabular-nums;
@@ -12889,8 +12874,8 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-minichip--outcome {
-  border-color: rgba(157, 255, 69, 0.4);
-  color: #9dff45;
+  border-color: rgba(246, 248, 240, 0.3);
+  color: rgba(246, 248, 240, 0.85);
 }
 
 .axis-os-minichip--target {
@@ -12899,7 +12884,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-card-note {
-  color: rgba(246, 248, 240, 0.6);
+  color: rgba(246, 248, 240, 0.7);
   font-size: 0.85rem;
   margin: 0;
 }
@@ -12933,5 +12918,166 @@ button.axis-review-row:focus-visible {
 
   .axis-os-inline input:not(:first-child) {
     grid-column: 1 / -1;
+  }
+}
+
+/* ── Axis public landing (Trophy Labs) ──────────────────────────────────── */
+
+.axis-home {
+  background:
+    linear-gradient(180deg, rgba(142, 255, 67, 0.06), transparent 26rem),
+    #050706;
+  color: #f6f8f0;
+  display: grid;
+  align-content: start;
+  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+}
+
+.axis-home * {
+  box-sizing: border-box;
+}
+
+.axis-home a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.axis-home-topbar span,
+.axis-home-topbar a,
+.axis-home-kicker,
+.axis-home h1,
+.axis-home-cta,
+.axis-home-steps strong {
+  font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.axis-home-topbar {
+  align-items: center;
+  border-bottom: 1px solid rgba(246, 248, 240, 0.12);
+  display: flex;
+  justify-content: space-between;
+  min-height: 4rem;
+  padding: 0.75rem clamp(1rem, 4vw, 3rem);
+}
+
+.axis-home-topbar span {
+  font-size: 0.95rem;
+}
+
+.axis-home-topbar a {
+  color: rgba(246, 248, 240, 0.65);
+  font-size: 0.78rem;
+}
+
+.axis-home-hero {
+  display: grid;
+  gap: 1.1rem;
+  justify-items: start;
+  padding: clamp(3rem, 10vw, 6rem) clamp(1rem, 4vw, 3rem) clamp(2rem, 6vw, 4rem);
+}
+
+.axis-home-kicker {
+  color: #9dff45;
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  margin: 0;
+}
+
+.axis-home h1 {
+  font-size: clamp(4rem, 18vw, 10rem);
+  line-height: 0.84;
+  margin: 0;
+}
+
+.axis-home-sub {
+  color: rgba(246, 248, 240, 0.78);
+  font-size: clamp(1.05rem, 2.6vw, 1.4rem);
+  line-height: 1.45;
+  margin: 0;
+  max-width: 34rem;
+}
+
+.axis-home-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.axis-home-cta {
+  border: 1px solid rgba(246, 248, 240, 0.3);
+  color: #f6f8f0;
+  font-size: 0.95rem;
+  min-height: 3.25rem;
+  padding: 1rem 1.3rem;
+}
+
+.axis-home-cta--primary {
+  background: #9dff45;
+  border-color: #9dff45;
+  color: #050706;
+}
+
+.axis-home-steps {
+  border-top: 1px solid rgba(246, 248, 240, 0.12);
+  display: grid;
+  gap: clamp(1.25rem, 4vw, 2.5rem);
+  padding: clamp(2rem, 6vw, 4rem) clamp(1rem, 4vw, 3rem);
+}
+
+.axis-home-steps article {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 26rem;
+}
+
+.axis-home-steps span {
+  color: #9dff45;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.axis-home-steps strong {
+  font-size: 1.5rem;
+}
+
+.axis-home-steps p {
+  color: rgba(246, 248, 240, 0.7);
+  font-size: 0.98rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.axis-home-proof {
+  border-top: 1px solid rgba(246, 248, 240, 0.12);
+  padding: clamp(2rem, 6vw, 3.5rem) clamp(1rem, 4vw, 3rem);
+}
+
+.axis-home-proof p {
+  color: rgba(246, 248, 240, 0.85);
+  font-size: clamp(1.1rem, 3vw, 1.5rem);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 38rem;
+}
+
+.axis-home-footer {
+  border-top: 1px solid rgba(246, 248, 240, 0.12);
+  color: rgba(246, 248, 240, 0.55);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  gap: 0.5rem 1.5rem;
+  justify-content: space-between;
+  padding: 1.25rem clamp(1rem, 4vw, 3rem) 2rem;
+}
+
+@media (min-width: 48rem) {
+  .axis-home-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
