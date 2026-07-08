@@ -6,13 +6,13 @@ import { useState } from "react";
 import {
   AxisOsFlow,
   type AxisOsFlowStep,
-  AxisOsHeader,
   AxisOsNotice,
   AxisOsScreenState,
   AxisOsSection,
   AxisOsStatusChip,
   formatAxisClock,
 } from "../../../../components/axis/AxisOsKit";
+import { AxisSuiteShell } from "../../../../components/axis/AxisSuiteShell";
 import {
   AXIS_EVENT_STATE_LABELS,
   type AxisEventContainer,
@@ -182,20 +182,17 @@ export default function AxisSessionWorkspacePage() {
           : null;
 
   return (
-    <main className="axis-os">
-      <AxisOsHeader
-        backHref="/axis"
-        backLabel="Axis"
-        kicker={event.team_name ?? undefined}
-        title={event.title}
-        right={
-          <AxisOsStatusChip
-            label={AXIS_EVENT_STATE_LABELS[event.status]}
-            tone={rank === 1 ? "live" : rank === 3 ? "ready" : "idle"}
-          />
-        }
-      />
-
+    <AxisSuiteShell
+      backHref="/axis"
+      backLabel="Axis"
+      title={event.title}
+      right={
+        <AxisOsStatusChip
+          label={AXIS_EVENT_STATE_LABELS[event.status]}
+          tone={rank === 1 ? "live" : rank === 3 ? "ready" : "idle"}
+        />
+      }
+    >
       <section className="axis-os-hint">
         <p>{nextStepHint(event, moments.length)}</p>
       </section>
@@ -317,6 +314,6 @@ export default function AxisSessionWorkspacePage() {
           </button>
         </section>
       )}
-    </main>
+    </AxisSuiteShell>
   );
 }

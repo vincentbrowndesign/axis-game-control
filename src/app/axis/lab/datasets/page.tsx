@@ -5,7 +5,7 @@ import { listAxisVisionDatasets } from "../../../../lib/axis/vision/dataset-regi
 import type { AxisVisionDataset, AxisVisionDatasetGroup, AxisVisionDatasetStatus } from "../../../../lib/axis/vision/types";
 
 export const metadata: Metadata = {
-  title: "Axis Lab / Datasets",
+  title: "Axis Intelligence",
   robots: { follow: false, index: false },
 };
 
@@ -16,6 +16,16 @@ const groups: AxisVisionDatasetGroup[] = [
   "Axis Private Datasets",
   "Memory / Correction Datasets",
 ];
+
+// Product-facing names for the internal dataset groups. Inside the cards the
+// internal dataset/manifest language is fine; the framing up top is product.
+const GROUP_DISPLAY: Record<AxisVisionDatasetGroup, { name: string; sub: string }> = {
+  "Axis Private Datasets": { name: "Private Clips", sub: "Film Axis captured itself" },
+  "Basketball-Specific Vision": { name: "Memory", sub: "Basketball-specific knowledge" },
+  "Memory / Correction Datasets": { name: "Corrections", sub: "What Axis got wrong, then fixed" },
+  "Public Baselines": { name: "Vision", sub: "How Axis sees the court" },
+  "Tracking / Pose": { name: "Movement", sub: "Footwork, pose, and motion" },
+};
 
 const filters = ["All", "Public", "Private", "Vision", "Tracking", "Pose", "Memory", "Ready", "Needs Work"] as const;
 type DatasetFilter = (typeof filters)[number];
@@ -35,10 +45,11 @@ export default async function AxisLabDatasetsPage({
   return (
     <main className="axis-lab-datasets" aria-labelledby="axis-lab-datasets-title">
       <section className="axis-lab-datasets__hero">
-        <p className="axis-lab-datasets__eyebrow">Axis Lab</p>
-        <h1 id="axis-lab-datasets-title">Dataset Registry</h1>
+        <p className="axis-lab-datasets__eyebrow">Trophy Labs · Axis</p>
+        <h1 id="axis-lab-datasets-title">Axis Intelligence</h1>
         <p>
-          Axis Lab is where datasets, model tests, and review tools live. The main product stays focused on capturing sessions and saving memory.
+          Everything Axis learns from — vision, movement, memory, private clips, and corrections — feeding one shared
+          memory layer under every session.
         </p>
       </section>
 
@@ -61,7 +72,10 @@ export default async function AxisLabDatasetsPage({
           return (
             <section className="axis-lab-datasets__group" aria-labelledby={`axis-dataset-group-${slug(group)}`} key={group}>
               <div className="axis-lab-datasets__group-heading">
-                <h2 id={`axis-dataset-group-${slug(group)}`}>{group}</h2>
+                <div>
+                  <h2 id={`axis-dataset-group-${slug(group)}`}>{GROUP_DISPLAY[group].name}</h2>
+                  <p className="axis-lab-datasets__group-sub">{GROUP_DISPLAY[group].sub}</p>
+                </div>
                 <span>{groupDatasets.length}</span>
               </div>
               <div className="axis-lab-datasets__list">
@@ -178,6 +192,12 @@ export default async function AxisLabDatasetsPage({
           line-height: 1.1;
         }
 
+        .axis-lab-datasets__group-sub {
+          color: #6a6a6a;
+          font-size: 0.84rem;
+          margin: 4px 0 0;
+        }
+
         .axis-lab-datasets__group-heading span,
         .axis-lab-datasets__lab-badge {
           border: 1px solid rgba(95, 111, 82, 0.28);
@@ -273,11 +293,11 @@ function DatasetCard({ dataset }: { dataset: AxisVisionDataset }) {
     <article className="axis-lab-datasets__card">
       <div className="axis-lab-datasets__card-top">
         <div>
-          <p className="axis-lab-datasets__eyebrow">{dataset.group}</p>
+          <p className="axis-lab-datasets__eyebrow">{GROUP_DISPLAY[dataset.group].name}</p>
           <h3>{dataset.name}</h3>
           <p>{dataset.purpose}</p>
         </div>
-        <span className="axis-lab-datasets__lab-badge">Axis Lab</span>
+        <span className="axis-lab-datasets__lab-badge">Intelligence</span>
       </div>
 
       <div className="axis-lab-datasets__chips" aria-label={`${dataset.name} useful for`}>

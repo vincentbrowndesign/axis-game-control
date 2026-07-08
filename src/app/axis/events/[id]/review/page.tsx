@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  AxisOsHeader,
   AxisOsNotice,
   AxisOsScreenState,
   AxisOsStatusChip,
   formatAxisClock,
 } from "../../../../../components/axis/AxisOsKit";
+import { AxisSuiteShell } from "../../../../../components/axis/AxisSuiteShell";
 import { AXIS_LENS_TAGS, type AxisMoment } from "../../../../../lib/axis-event-container";
 import { useAxisEventDetail } from "../../../../../lib/use-axis-event-detail";
 
@@ -122,19 +122,17 @@ export default function AxisMomentsPage() {
   ).length;
 
   return (
-    <main className="axis-os">
-      <AxisOsHeader
-        backHref={`/axis/events/${eventId}`}
-        backLabel={event.title}
-        title="Moments"
-        right={
-          <AxisOsStatusChip
-            label={`${tagged}/${moments.length} tagged`}
-            tone={tagged === moments.length && moments.length > 0 ? "ready" : "idle"}
-          />
-        }
-      />
-
+    <AxisSuiteShell
+      backHref={`/axis/events/${eventId}`}
+      backLabel={event.title}
+      title="Moments"
+      right={
+        <AxisOsStatusChip
+          label={`${tagged}/${moments.length} tagged`}
+          tone={tagged === moments.length && moments.length > 0 ? "ready" : "idle"}
+        />
+      }
+    >
       <section className="axis-os-list" aria-label="Moments">
         {!moments.length && <AxisOsNotice tone="empty">No moments yet. Go live and tap Save or Teach.</AxisOsNotice>}
         {moments.map((moment) => {
@@ -277,6 +275,6 @@ export default function AxisMomentsPage() {
       <footer className="axis-os-livefooter">
         <Link href={`/axis/events/${eventId}/report`}>Build Package →</Link>
       </footer>
-    </main>
+    </AxisSuiteShell>
   );
 }

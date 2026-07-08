@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  AxisOsHeader,
   AxisOsNotice,
   AxisOsScreenState,
   AxisOsSection,
   formatAxisClock,
 } from "../../../../../components/axis/AxisOsKit";
+import { AxisSuiteShell } from "../../../../../components/axis/AxisSuiteShell";
 import type {
   AxisAccessLink,
   AxisEventContainer,
@@ -174,14 +174,12 @@ export default function AxisEventReportPage() {
   }
 
   return (
-    <main className="axis-os">
-      <AxisOsHeader
-        backHref={`/axis/events/${eventId}`}
-        backLabel={event.title}
-        title="Package"
-        right={saved ? <span className="axis-os-savedchip">Saved</span> : undefined}
-      />
-
+    <AxisSuiteShell
+      backHref={`/axis/events/${eventId}`}
+      backLabel={event.title}
+      title="Package"
+      right={saved ? <span className="axis-os-savedchip">Saved</span> : undefined}
+    >
       <section className="axis-os-hint">
         <p>Package this session for the people who need it — then share, sell, or send.</p>
       </section>
@@ -293,6 +291,6 @@ export default function AxisEventReportPage() {
       <footer className="axis-os-livefooter">
         <Link href={`/axis/events/${eventId}`}>Done · Back to Session</Link>
       </footer>
-    </main>
+    </AxisSuiteShell>
   );
 }

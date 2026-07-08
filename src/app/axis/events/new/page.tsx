@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AxisOsHeader, AxisOsNotice } from "../../../../components/axis/AxisOsKit";
+import { AxisOsNotice } from "../../../../components/axis/AxisOsKit";
+import { AxisSuiteShell } from "../../../../components/axis/AxisSuiteShell";
 import type { AxisEventType, AxisSourceMode } from "../../../../lib/axis-event-container";
 
 const WHAT: Array<{ type: AxisEventType; name: string }> = [
@@ -82,9 +83,7 @@ export default function AxisNewSessionPage() {
   }
 
   return (
-    <main className="axis-os">
-      <AxisOsHeader backHref="/axis" backLabel="Axis" kicker="Trophy Labs" title="New Session" />
-
+    <AxisSuiteShell backHref="/axis" backLabel="Axis" title="New Session">
       <section className="axis-os-form">
         <div className="axis-os-field">
           <span>What are we capturing?</span>
@@ -147,6 +146,6 @@ export default function AxisNewSessionPage() {
           {saving ? "Starting…" : "Start"}
         </button>
       </section>
-    </main>
+    </AxisSuiteShell>
   );
 }

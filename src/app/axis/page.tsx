@@ -1,25 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  AxisOsHeader,
-  AxisOsNotice,
-  AxisOsSection,
-  AxisOsStatusChip,
-} from "../../components/axis/AxisOsKit";
-import {
-  AXIS_EVENT_STATE_LABELS,
-  type AxisAccessLink,
-  type AxisEventContainer,
-  type AxisEventPlayer,
-} from "../../lib/axis-event-container";
-
-const SOURCE_LABELS: Record<string, string> = {
-  attach_stream: "Replay",
-  attach_video: "Video",
-  record_now: "Camera",
-};
+import { AxisOsNotice, AxisOsSection, AxisOsStatusChip } from "../../components/axis/AxisOsKit";
+import { AXIS_APPS, AxisSuiteShell } from "../../components/axis/AxisSuiteShell";
+import { AXIS_EVENT_STATE_LABELS, type AxisEventContainer } from "../../lib/axis-event-container";
 
 // Where a session should resume when tapped from home.
 function continueTarget(event: AxisEventContainer): { href: string; label: string } {
@@ -35,76 +21,112 @@ function continueTarget(event: AxisEventContainer): { href: string; label: strin
   return { href: `/axis/events/${event.id}`, label: "Open →" };
 }
 
-export default function AxisHomePage() {
+export default function AxisSuiteHomePage() {
+  const router = useRouter();
   const [liveNow, setLiveNow] = useState<AxisEventContainer[]>([]);
-  const [today, setToday] = useState<AxisEventContainer[]>([]);
-  const [replays, setReplays] = useState<AxisEventContainer[]>([]);
-  const [players, setPlayers] = useState<string[]>([]);
-  const [links, setLinks] = useState<AxisAccessLink[]>([]);
+  const [sessions, setSessions] = useState<AxisEventContainer[]>([]);
+  const [query, setQuery] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "error" | "offline">("loading");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [eventsRes, linksRes] = await Promise.all([
-        fetch("/api/axis/events").catch(() => null),
-        fetch("/api/axis/access-links").catch(() => null),
-      ]);
+      const response = await fetch("/api/axis/events").catch(() => null);
       if (cancelled) return;
-      if (!eventsRes || eventsRes.status === 503) {
+      if (!response || response.status === 503) {
         setState("offline");
         return;
       }
-      if (!eventsRes.ok) {
+      if (!response.ok) {
         setState("error");
         return;
       }
-      const events = (await eventsRes.json()) as { active: AxisEventContainer[]; recent: AxisEventContainer[] };
+      const events = (await response.json()) as { active: AxisEventContainer[]; recent: AxisEventContainer[] };
       if (cancelled) return;
       const active = events.active ?? [];
       const recent = events.recent ?? [];
       setLiveNow(active.filter((event) => event.status === "recording" || event.status === "live"));
-      setToday(active.filter((event) => event.status !== "recording" && event.status !== "live"));
-      setReplays(recent);
-      if (linksRes?.ok) {
-        const body = (await linksRes.json()) as { accessLinks: AxisAccessLink[] };
-        if (!cancelled) setLinks(body.accessLinks ?? []);
-      }
-      setState("ready");
-
-      // Surface roster names from the latest sessions (no dedicated players API yet).
-      const sourceIds = [...active, ...recent].slice(0, 6).map((event) => event.id);
-      const details = await Promise.all(
-        sourceIds.map((id) =>
-          fetch(`/api/axis/events/${id}`)
-            .then((response) => (response.ok ? (response.json() as Promise<{ players: AxisEventPlayer[] }>) : null))
-            .catch(() => null),
-        ),
+      setSessions(
+        [...active.filter((event) => event.status !== "recording" && event.status !== "live"), ...recent].slice(0, 8),
       );
-      if (cancelled) return;
-      const names = new Set<string>();
-      for (const detail of details) {
-        for (const player of detail?.players ?? []) names.add(player.display_name);
-      }
-      setPlayers([...names].slice(0, 12));
+      setState("ready");
     })();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return (
-    <main className="axis-os">
-      <AxisOsHeader
-        kicker="Trophy Labs"
-        title="Axis"
-        right={<span className="axis-os-tagline">Every session becomes film, proof, and memory.</span>}
-      />
+  const needsPackage = sessions.filter((event) => event.status === "review");
+  const filtered = query.trim()
+    ? sessions.filter((event) => event.title.toLowerCase().includes(query.trim().toLowerCase()))
+    : sessions;
 
-      <section className="axis-os-hero">
-        <Link className="axis-os-primary" href="/axis/events/new">
-          Start Session
-        </Link>
+  const liveTarget = liveNow[0] ? `/axis/events/${liveNow[0].id}/record` : "/axis/events/new";
+  const packageTarget = needsPackage[0] ? `/axis/events/${needsPackage[0].id}/report` : "/axis/packages";
+
+  function runCommand() {
+    const text = query.trim().toLowerCase();
+    if (!text) return;
+    if (text.includes("live")) {
+      router.push(liveTarget);
+      return;
+    }
+    if (text.includes("player")) {
+      router.push("/axis/players");
+      return;
+    }
+    if (text.includes("package") || text.includes("share") || text.includes("sell")) {
+      router.push(packageTarget);
+      return;
+    }
+    if (text.includes("film") || text.includes("replay") || text.includes("clip")) {
+      router.push("/axis/clip-room");
+      return;
+    }
+    if (text.includes("start") || text.includes("session") || text.includes("new")) {
+      router.push("/axis/events/new");
+      return;
+    }
+    const match = filtered[0];
+    router.push(match ? continueTarget(match).href : "/axis/events/new");
+  }
+
+  return (
+    <AxisSuiteShell>
+      <section className="axis-suite-hero">
+        <input
+          className="axis-suite-cmd"
+          onChange={(input) => setQuery(input.target.value)}
+          onKeyDown={(key) => {
+            if (key.key === "Enter") runCommand();
+          }}
+          placeholder="What are we doing today?"
+          value={query}
+        />
+        <div className="axis-suite-quick">
+          <Link className="axis-suite-quickbtn axis-suite-quickbtn--primary" href="/axis/events/new">
+            Start Session
+          </Link>
+          <Link className="axis-suite-quickbtn" href="/axis/players">
+            Find Player
+          </Link>
+          <Link className="axis-suite-quickbtn" href={liveTarget}>
+            Open Live
+          </Link>
+          <Link className="axis-suite-quickbtn" href={packageTarget}>
+            Build Package
+          </Link>
+        </div>
+      </section>
+
+      <section className="axis-suite-homeapps" aria-label="Axis apps">
+        {AXIS_APPS.map((app) => (
+          <Link className="axis-suite-app axis-suite-app--card" href={app.href} key={app.name}>
+            <span className="axis-suite-glyph">{app.glyph}</span>
+            <strong>{app.name}</strong>
+            <span className="axis-suite-app-sub">{app.sub}</span>
+          </Link>
+        ))}
       </section>
 
       {state === "loading" && (
@@ -129,7 +151,6 @@ export default function AxisHomePage() {
             <Link className="axis-os-row" href={`/axis/events/${event.id}/record`} key={event.id}>
               <div className="axis-os-row-main">
                 <strong>{event.title}</strong>
-                <span>{SOURCE_LABELS[event.source_mode] ?? "Session"}</span>
               </div>
               <AxisOsStatusChip label="Live" tone="live" />
             </Link>
@@ -138,17 +159,16 @@ export default function AxisHomePage() {
       )}
 
       {state === "ready" && (
-        <AxisOsSection label="Today" title="Today">
-          {!today.length && <AxisOsNotice tone="empty">Nothing in progress. Start a session.</AxisOsNotice>}
-          {today.map((event) => {
+        <AxisOsSection label="Recent sessions" title="Recent sessions">
+          {!filtered.length && !query && <AxisOsNotice tone="empty">Nothing yet. Start a session.</AxisOsNotice>}
+          {!filtered.length && query && <AxisOsNotice tone="empty">No sessions match “{query}”.</AxisOsNotice>}
+          {filtered.map((event) => {
             const target = continueTarget(event);
             return (
               <Link className="axis-os-row" href={target.href} key={event.id}>
                 <div className="axis-os-row-main">
                   <strong>{event.title}</strong>
-                  <span>
-                    {SOURCE_LABELS[event.source_mode] ?? "Session"} · {AXIS_EVENT_STATE_LABELS[event.status]}
-                  </span>
+                  <span>{AXIS_EVENT_STATE_LABELS[event.status]}</span>
                 </div>
                 <em className="axis-os-row-go">{target.label}</em>
               </Link>
@@ -157,51 +177,19 @@ export default function AxisHomePage() {
         </AxisOsSection>
       )}
 
-      {state === "ready" && (
-        <AxisOsSection label="Recent replays" title="Recent replays">
-          {!replays.length && <AxisOsNotice tone="empty">Finished sessions land here as replays.</AxisOsNotice>}
-          {replays.map((event) => (
-            <Link className="axis-os-row" href={`/axis/events/${event.id}`} key={event.id}>
+      {state === "ready" && needsPackage.length > 0 && (
+        <AxisOsSection label="Needs package" title="Needs package">
+          {needsPackage.map((event) => (
+            <Link className="axis-os-row" href={`/axis/events/${event.id}/report`} key={event.id}>
               <div className="axis-os-row-main">
                 <strong>{event.title}</strong>
-                <span>{SOURCE_LABELS[event.source_mode] ?? "Session"}</span>
+                <span>Moments marked, package not built</span>
               </div>
-              <AxisOsStatusChip
-                label={AXIS_EVENT_STATE_LABELS[event.status]}
-                tone={event.status === "ready" ? "ready" : "idle"}
-              />
+              <em className="axis-os-row-go">Build →</em>
             </Link>
           ))}
         </AxisOsSection>
       )}
-
-      {state === "ready" && players.length > 0 && (
-        <AxisOsSection label="Players" title="Players">
-          <div className="axis-os-chiprow">
-            {players.map((name) => (
-              <span className="axis-os-pill" key={name}>
-                {name}
-              </span>
-            ))}
-          </div>
-        </AxisOsSection>
-      )}
-
-      {state === "ready" && links.length > 0 && (
-        <AxisOsSection label="Packages" title="Packages">
-          {links.map((link) => (
-            <a className="axis-os-row" href={link.url} key={link.id} rel="noreferrer" target="_blank">
-              <div className="axis-os-row-main">
-                <strong>{link.label}</strong>
-                <span>Shared package</span>
-              </div>
-              {typeof link.price_cents === "number" && (
-                <em className="axis-os-row-go">${(link.price_cents / 100).toFixed(2)}</em>
-              )}
-            </a>
-          ))}
-        </AxisOsSection>
-      )}
-    </main>
+    </AxisSuiteShell>
   );
 }
