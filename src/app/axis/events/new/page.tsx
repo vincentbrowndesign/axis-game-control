@@ -3,130 +3,148 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AxisOsHeader, AxisOsNotice } from "../../../../components/axis/AxisOsKit";
-import { AXIS_EVENT_TYPES, type AxisEventType, type AxisSourceMode } from "../../../../lib/axis-event-container";
+import type { AxisEventType, AxisSourceMode } from "../../../../lib/axis-event-container";
 
-const SOURCE_MODES: Array<{ mode: AxisSourceMode; name: string; detail: string }> = [
-  { mode: "record_now", name: "Record Now", detail: "Live training, private session, practice segment" },
-  { mode: "attach_video", name: "Attach Video", detail: "Phone video, AI camera file, uploaded replay" },
-  { mode: "attach_stream", name: "Attach Stream", detail: "Facebook Live, YouTube Live, OBS, replay link" },
+const WHAT: Array<{ type: AxisEventType; name: string }> = [
+  { name: "Game", type: "game" },
+  { name: "Practice", type: "practice" },
+  { name: "Training", type: "training" },
+  { name: "Small Group", type: "small_group" },
+  { name: "Private", type: "private" },
 ];
 
-const TYPE_LABELS: Record<AxisEventType, string> = {
-  calibrate: "Calibrate",
-  clinic: "Clinic",
-  film_review: "Film Review",
+const HOW: Array<{ mode: AxisSourceMode; name: string; detail: string }> = [
+  { detail: "Go live from this phone or a court camera", mode: "record_now", name: "Camera" },
+  { detail: "Attach a video you already recorded", mode: "attach_video", name: "Upload Video" },
+  { detail: "Paste a stream or replay link", mode: "attach_stream", name: "Add Replay Link" },
+];
+
+const WHO = ["Team", "Player", "Group"] as const;
+
+const TYPE_LABELS: Record<string, string> = {
   game: "Game",
-  other: "Other",
   practice: "Practice",
   private: "Private",
   small_group: "Small Group",
   training: "Training",
 };
 
-export default function AxisEventNewPage() {
+export default function AxisNewSessionPage() {
   const router = useRouter();
-  const [title, setTitle] = useState("");
-  const [eventType, setEventType] = useState<AxisEventType>("training");
-  const [sourceMode, setSourceMode] = useState<AxisSourceMode>("record_now");
-  const [teamName, setTeamName] = useState("");
-  const [location, setLocation] = useState("");
+  const [what, setWhat] = useState<AxisEventType>("training");
+  const [how, setHow] = useState<AxisSourceMode>("record_now");
+  const [who, setWho] = useState<(typeof WHO)[number]>("Team");
+  const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<{ tone: "error" | "offline"; message: string } | null>(null);
 
-  async function createEvent() {
-    if (!title.trim() || saving) return;
+  async function start() {
+    if (saving) return;
     setSaving(true);
     setError(null);
+    const trimmedName = name.trim();
+    const dateLabel = new Date().toLocaleDateString("en-US", { day: "numeric", month: "short" });
+    const title = [trimmedName, TYPE_LABELS[what], dateLabel].filter(Boolean).join(" · ");
+
     const response = await fetch("/api/axis/events", {
       body: JSON.stringify({
-        event_type: eventType,
-        location,
-        source_mode: sourceMode,
-        team_name: teamName,
+        event_type: what,
+        source_mode: how,
+        team_name: who === "Team" && trimmedName ? trimmedName : null,
         title,
       }),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     }).catch(() => null);
     if (!response || response.status === 503) {
-      setError({ message: "Event memory is offline. Check Supabase configuration.", tone: "offline" });
+      setError({ message: "Session memory is offline right now.", tone: "offline" });
       setSaving(false);
       return;
     }
     if (!response.ok) {
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
-      setError({ message: body?.error ?? "Could not create the event.", tone: "error" });
+      setError({ message: body?.error ?? "Could not start the session.", tone: "error" });
       setSaving(false);
       return;
     }
     const body = (await response.json()) as { event: { id: string } };
-    router.push(
-      sourceMode === "record_now" ? `/axis/events/${body.event.id}/record` : `/axis/events/${body.event.id}`,
-    );
+
+    // If this session is for one player, put them on the roster right away.
+    if (who === "Player" && trimmedName) {
+      await fetch(`/api/axis/events/${body.event.id}/players`, {
+        body: JSON.stringify({ display_name: trimmedName }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }).catch(() => null);
+    }
+
+    router.push(how === "record_now" ? `/axis/events/${body.event.id}/record` : `/axis/events/${body.event.id}`);
   }
 
   return (
     <main className="axis-os">
-      <AxisOsHeader backHref="/axis" backLabel="Axis" kicker="Trophy Labs" title="New Event" />
+      <AxisOsHeader backHref="/axis" backLabel="Axis" kicker="Trophy Labs" title="New Session" />
 
       <section className="axis-os-form">
-        <label className="axis-os-field">
-          <span>Event title</span>
-          <input
-            autoFocus
-            onChange={(input) => setTitle(input.target.value)}
-            placeholder="Tuesday small group"
-            value={title}
-          />
-        </label>
-
         <div className="axis-os-field">
-          <span>Event type</span>
+          <span>What are we capturing?</span>
           <div className="axis-os-chiprow">
-            {AXIS_EVENT_TYPES.map((type) => (
+            {WHAT.map((option) => (
               <button
-                className={type === eventType ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
-                key={type}
-                onClick={() => setEventType(type)}
+                className={option.type === what ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
+                key={option.type}
+                onClick={() => setWhat(option.type)}
                 type="button"
               >
-                {TYPE_LABELS[type]}
+                {option.name}
               </button>
             ))}
           </div>
         </div>
 
         <div className="axis-os-field">
-          <span>Source</span>
+          <span>How are we capturing?</span>
           <div className="axis-os-sourcegrid">
-            {SOURCE_MODES.map((source) => (
+            {HOW.map((option) => (
               <button
-                className={source.mode === sourceMode ? "axis-os-source axis-os-source--on" : "axis-os-source"}
-                key={source.mode}
-                onClick={() => setSourceMode(source.mode)}
+                className={option.mode === how ? "axis-os-source axis-os-source--on" : "axis-os-source"}
+                key={option.mode}
+                onClick={() => setHow(option.mode)}
                 type="button"
               >
-                <strong>{source.name}</strong>
-                <p>{source.detail}</p>
+                <strong>{option.name}</strong>
+                <p>{option.detail}</p>
               </button>
             ))}
           </div>
         </div>
 
-        <label className="axis-os-field">
-          <span>Team (optional)</span>
-          <input onChange={(input) => setTeamName(input.target.value)} placeholder="Bridge 14U" value={teamName} />
-        </label>
-
-        <label className="axis-os-field">
-          <span>Location (optional)</span>
-          <input onChange={(input) => setLocation(input.target.value)} placeholder="Main gym" value={location} />
-        </label>
+        <div className="axis-os-field">
+          <span>Who is this for?</span>
+          <div className="axis-os-chiprow">
+            {WHO.map((option) => (
+              <button
+                className={option === who ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
+                key={option}
+                onClick={() => setWho(option)}
+                type="button"
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+          <input
+            className="axis-os-loneinput"
+            onChange={(input) => setName(input.target.value)}
+            placeholder={who === "Player" ? "Player name (optional)" : who === "Team" ? "Team name (optional)" : "Group name (optional)"}
+            value={name}
+          />
+        </div>
 
         {error && <AxisOsNotice tone={error.tone}>{error.message}</AxisOsNotice>}
 
-        <button className="axis-os-primary" disabled={!title.trim() || saving} onClick={createEvent} type="button">
-          {saving ? "Creating…" : sourceMode === "record_now" ? "Create · Go Live" : "Create Event"}
+        <button className="axis-os-primary" disabled={saving} onClick={start} type="button">
+          {saving ? "Starting…" : "Start"}
         </button>
       </section>
     </main>

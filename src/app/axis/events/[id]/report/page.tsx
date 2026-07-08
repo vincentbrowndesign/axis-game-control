@@ -17,6 +17,8 @@ import type {
   AxisReport,
 } from "../../../../../lib/axis-event-container";
 
+const MARK_LABELS: Record<string, string> = { FIX: "Teach", KEEP: "Save" };
+
 function toLines(items: string[]) {
   return items.join("\n");
 }
@@ -164,9 +166,9 @@ export default function AxisEventReportPage() {
         title="Report"
         tone={loadState === "loading" ? "loading" : loadState === "offline" ? "offline" : "error"}
       >
-        {loadState === "loading" && "Loading report…"}
-        {loadState === "offline" && "Event memory is offline. Check Supabase configuration."}
-        {loadState === "error" && "Could not load this event."}
+        {loadState === "loading" && "Loading package…"}
+        {loadState === "offline" && "Session memory is offline right now."}
+        {loadState === "error" && "Could not load this session."}
       </AxisOsScreenState>
     );
   }
@@ -181,23 +183,23 @@ export default function AxisEventReportPage() {
       />
 
       <section className="axis-os-hint">
-        <p>One packaging step: build the report, then attach the access link.</p>
+        <p>Package this session for the people who need it — then share, sell, or send.</p>
       </section>
 
-      <AxisOsSection label="Report" title="1 · Report">
+      <AxisOsSection label="Package" title="The package">
         <div className="axis-os-form axis-os-form--flush">
           <label className="axis-os-field">
-            <span>Summary</span>
+            <span>Parent recap</span>
             <textarea
               onChange={(input) => setSummary(input.target.value)}
-              placeholder="What this event produced"
+              placeholder="What happened in this session, in plain words"
               rows={3}
               value={summary}
             />
           </label>
 
           <label className="axis-os-field">
-            <span>Strengths (one per line)</span>
+            <span>Player strengths (one per line)</span>
             <textarea
               onChange={(input) => setStrengths(input.target.value)}
               placeholder={"Pull-up footwork held under pressure"}
@@ -207,7 +209,7 @@ export default function AxisEventReportPage() {
           </label>
 
           <label className="axis-os-field">
-            <span>Corrections (one per line)</span>
+            <span>Teaching points (one per line)</span>
             <textarea
               onChange={(input) => setCorrections(input.target.value)}
               placeholder={"Landing drifts right on closeouts"}
@@ -226,8 +228,8 @@ export default function AxisEventReportPage() {
           </label>
 
           <div className="axis-os-field">
-            <span>Evidence moments</span>
-            {!moments.length && <AxisOsNotice tone="empty">No moments to attach yet.</AxisOsNotice>}
+            <span>Moments to include</span>
+            {!moments.length && <AxisOsNotice tone="empty">No moments to include yet.</AxisOsNotice>}
             <div className="axis-os-chiprow">
               {moments.map((moment) => (
                 <button
@@ -242,25 +244,25 @@ export default function AxisEventReportPage() {
                   }
                   type="button"
                 >
-                  {moment.ui_label} {formatAxisClock(moment.timestamp_seconds)}
+                  {MARK_LABELS[moment.ui_label]} {formatAxisClock(moment.timestamp_seconds)}
                 </button>
               ))}
             </div>
           </div>
 
           <button className="axis-os-primary" disabled={busy} onClick={saveReport} type="button">
-            {busy ? "Saving…" : report ? "Save Report" : "Create Report"}
+            {busy ? "Saving…" : "Save Package"}
           </button>
         </div>
       </AxisOsSection>
 
-      <AxisOsSection label="Access" title="2 · Access">
-        {!links.length && <AxisOsNotice tone="empty">No access links yet. Attach one to sell or share.</AxisOsNotice>}
+      <AxisOsSection label="Share" title="Share / Sell / Send">
+        {!links.length && <AxisOsNotice tone="empty">Nothing shared yet. Add a link below.</AxisOsNotice>}
         {links.map((link) => (
           <a className="axis-os-row" href={link.url} key={link.id} rel="noreferrer" target="_blank">
             <div className="axis-os-row-main">
               <strong>{link.label}</strong>
-              <span>{link.target_type}</span>
+              <span>Shared</span>
             </div>
             {typeof link.price_cents === "number" && (
               <em className="axis-os-row-go">${(link.price_cents / 100).toFixed(2)}</em>
@@ -268,12 +270,12 @@ export default function AxisEventReportPage() {
           </a>
         ))}
         <div className="axis-os-inline">
-          <input onChange={(input) => setLinkLabel(input.target.value)} placeholder="Link label" value={linkLabel} />
           <input
-            onChange={(input) => setLinkUrl(input.target.value)}
-            placeholder="Payment or access URL"
-            value={linkUrl}
+            onChange={(input) => setLinkLabel(input.target.value)}
+            placeholder="What are you sharing?"
+            value={linkLabel}
           />
+          <input onChange={(input) => setLinkUrl(input.target.value)} placeholder="Link" value={linkUrl} />
           <input
             inputMode="decimal"
             onChange={(input) => setLinkPrice(input.target.value)}
@@ -281,7 +283,7 @@ export default function AxisEventReportPage() {
             value={linkPrice}
           />
           <button disabled={!linkLabel.trim() || !linkUrl.trim() || busy} onClick={addLink} type="button">
-            Attach Link
+            Share
           </button>
         </div>
       </AxisOsSection>
@@ -289,7 +291,7 @@ export default function AxisEventReportPage() {
       {error && <AxisOsNotice tone="error">{error}</AxisOsNotice>}
 
       <footer className="axis-os-livefooter">
-        <Link href={`/axis/events/${eventId}`}>Done · Back to Event</Link>
+        <Link href={`/axis/events/${eventId}`}>Done · Back to Session</Link>
       </footer>
     </main>
   );

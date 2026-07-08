@@ -10,18 +10,28 @@ import {
   AxisOsStatusChip,
   formatAxisClock,
 } from "../../../../../components/axis/AxisOsKit";
-import {
-  AXIS_LENS_TAGS,
-  AXIS_OUTPUT_TARGETS,
-  type AxisMoment,
-} from "../../../../../lib/axis-event-container";
+import { AXIS_LENS_TAGS, type AxisMoment } from "../../../../../lib/axis-event-container";
 import { useAxisEventDetail } from "../../../../../lib/use-axis-event-detail";
+
+const MARK_LABELS: Record<string, string> = { FIX: "Teach", KEEP: "Save" };
+
+// Coach-facing destinations; values are the stored output targets.
+const SAVE_AS: Array<{ value: string; label: string }> = [
+  { label: "Clip", value: "clip" },
+  { label: "Report", value: "report" },
+  { label: "Player Note", value: "player_history" },
+  { label: "Training Focus", value: "practice_plan" },
+];
+
+const SAVE_AS_LABELS: Record<string, string> = Object.fromEntries(
+  SAVE_AS.map((option) => [option.value, option.label]),
+);
 
 function toggle(list: string[], value: string) {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
 }
 
-export default function AxisEventReviewPage() {
+export default function AxisMomentsPage() {
   const params = useParams<{ id: string }>();
   const eventId = params.id;
   const { detail, mutate, state } = useAxisEventDetail(eventId);
@@ -100,8 +110,8 @@ export default function AxisEventReviewPage() {
         tone={state === "loading" ? "loading" : state === "offline" ? "offline" : "error"}
       >
         {state === "loading" && "Loading moments…"}
-        {state === "offline" && "Event memory is offline. Check Supabase configuration."}
-        {state === "error" && "Could not load this event."}
+        {state === "offline" && "Session memory is offline right now."}
+        {state === "error" && "Could not load this session."}
       </AxisOsScreenState>
     );
   }
@@ -117,13 +127,16 @@ export default function AxisEventReviewPage() {
         backHref={`/axis/events/${eventId}`}
         backLabel={event.title}
         title="Moments"
-        right={<AxisOsStatusChip label={`${tagged}/${moments.length} tagged`} tone={tagged === moments.length && moments.length > 0 ? "ready" : "idle"} />}
+        right={
+          <AxisOsStatusChip
+            label={`${tagged}/${moments.length} tagged`}
+            tone={tagged === moments.length && moments.length > 0 ? "ready" : "idle"}
+          />
+        }
       />
 
       <section className="axis-os-list" aria-label="Moments">
-        {!moments.length && (
-          <AxisOsNotice tone="empty">No moments yet. Mark KEEP or FIX on the live screen.</AxisOsNotice>
-        )}
+        {!moments.length && <AxisOsNotice tone="empty">No moments yet. Go live and tap Save or Teach.</AxisOsNotice>}
         {moments.map((moment) => {
           const playerName = moment.event_player_id
             ? players.find((player) => player.id === moment.event_player_id)?.display_name
@@ -137,13 +150,13 @@ export default function AxisEventReviewPage() {
               <button className="axis-os-card-head" onClick={() => openMoment(moment)} type="button">
                 <div className="axis-os-card-title">
                   <strong className={moment.ui_label === "KEEP" ? "axis-os-keep" : "axis-os-fix"}>
-                    {moment.ui_label}
+                    {MARK_LABELS[moment.ui_label]}
                   </strong>
                   <em>{formatAxisClock(moment.timestamp_seconds)}</em>
                   {playerName && <span>{playerName}</span>}
                   {savedId === moment.id && <span className="axis-os-savedchip">Saved</span>}
                 </div>
-                {(moment.lens_tags.length > 0 || moment.output_targets.length > 0 || moment.outcome_tags.length > 0) && (
+                {(moment.lens_tags.length > 0 || moment.outcome_tags.length > 0 || moment.output_targets.length > 0) && (
                   <div className="axis-os-card-tags">
                     {moment.lens_tags.map((tag) => (
                       <span className="axis-os-minichip" key={`lens-${tag}`}>
@@ -157,7 +170,7 @@ export default function AxisEventReviewPage() {
                     ))}
                     {moment.output_targets.map((target) => (
                       <span className="axis-os-minichip axis-os-minichip--target" key={`target-${target}`}>
-                        → {target.replace("_", " ")}
+                        → {SAVE_AS_LABELS[target] ?? target.replace("_", " ")}
                       </span>
                     ))}
                   </div>
@@ -168,7 +181,7 @@ export default function AxisEventReviewPage() {
               {open && (
                 <div className="axis-os-editor">
                   <div className="axis-os-field">
-                    <span>Player</span>
+                    <span>Who?</span>
                     <div className="axis-os-chiprow">
                       <button
                         className={!eventPlayerId ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
@@ -190,13 +203,14 @@ export default function AxisEventReviewPage() {
                     </div>
                     {!players.length && (
                       <AxisOsNotice tone="empty">
-                        Add players on the <Link href={`/axis/events/${eventId}`}>event screen</Link> to tag them here.
+                        Add players on the <Link href={`/axis/events/${eventId}`}>session screen</Link> to tag them
+                        here.
                       </AxisOsNotice>
                     )}
                   </div>
 
                   <div className="axis-os-field">
-                    <span>Lens</span>
+                    <span>What happened?</span>
                     <div className="axis-os-chiprow">
                       {AXIS_LENS_TAGS.map((tag) => (
                         <button
@@ -209,28 +223,26 @@ export default function AxisEventReviewPage() {
                         </button>
                       ))}
                     </div>
-                  </div>
-
-                  <label className="axis-os-field">
-                    <span>Outcome</span>
                     <input
                       onChange={(input) => setOutcome(input.target.value)}
-                      placeholder="made shot, drift right"
+                      placeholder="Add detail — made shot, drifted right"
                       value={outcome}
                     />
-                  </label>
+                  </div>
 
                   <div className="axis-os-field">
-                    <span>Output</span>
+                    <span>Save as</span>
                     <div className="axis-os-chiprow">
-                      {AXIS_OUTPUT_TARGETS.map((target) => (
+                      {SAVE_AS.map((option) => (
                         <button
-                          className={outputTargets.includes(target) ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"}
-                          key={target}
-                          onClick={() => setOutputTargets((current) => toggle(current, target))}
+                          className={
+                            outputTargets.includes(option.value) ? "axis-os-chip axis-os-chip--on" : "axis-os-chip"
+                          }
+                          key={option.value}
+                          onClick={() => setOutputTargets((current) => toggle(current, option.value))}
                           type="button"
                         >
-                          {target.replace("_", " ")}
+                          {option.label}
                         </button>
                       ))}
                     </div>
@@ -238,7 +250,11 @@ export default function AxisEventReviewPage() {
 
                   <label className="axis-os-field">
                     <span>Note</span>
-                    <input onChange={(input) => setNote(input.target.value)} placeholder="What happened" value={note} />
+                    <input
+                      onChange={(input) => setNote(input.target.value)}
+                      placeholder="What you want to remember"
+                      value={note}
+                    />
                   </label>
 
                   <button

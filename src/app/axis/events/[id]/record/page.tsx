@@ -15,6 +15,9 @@ import {
 import type { AxisEventContainer, AxisMoment, AxisMomentLabel } from "../../../../../lib/axis-event-container";
 import { useAxisEventDetail } from "../../../../../lib/use-axis-event-detail";
 
+// On-screen coach language; the stored values stay KEEP / FIX.
+const MARK_LABELS: Record<AxisMomentLabel, string> = { FIX: "Teach", KEEP: "Save" };
+
 export default function AxisEventRecordPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -72,13 +75,13 @@ export default function AxisEventRecordPage() {
       method: "POST",
     }).catch(() => null);
     if (!response?.ok) {
-      setError(`Could not save the ${label} moment.`);
+      setError("Could not save that moment.");
       return;
     }
     const body = (await response.json()) as { moment: AxisMoment };
     mutate((current) => ({ ...current, moments: [...current.moments, body.moment] }));
     setError(null);
-    setLastMark(`${label} saved · ${formatAxisClock(body.moment.timestamp_seconds)}`);
+    setLastMark(`${MARK_LABELS[label]} · ${formatAxisClock(body.moment.timestamp_seconds)}`);
     if (lastMarkTimer.current) window.clearTimeout(lastMarkTimer.current);
     lastMarkTimer.current = window.setTimeout(() => setLastMark(null), 2000);
   }
@@ -101,9 +104,9 @@ export default function AxisEventRecordPage() {
         title="Axis Live"
         tone={state === "loading" ? "loading" : state === "offline" ? "offline" : "error"}
       >
-        {state === "loading" && "Loading event…"}
-        {state === "offline" && "Event memory is offline. Check Supabase configuration."}
-        {state === "error" && "Could not load this event."}
+        {state === "loading" && "Loading session…"}
+        {state === "offline" && "Session memory is offline right now."}
+        {state === "error" && "Could not load this session."}
       </AxisOsScreenState>
     );
   }
@@ -146,25 +149,29 @@ export default function AxisEventRecordPage() {
           <button className="axis-os-primary" disabled={busy} onClick={goLive} type="button">
             Go Live
           </button>
-          <AxisOsNotice tone="empty">The clock starts once. KEEP and FIX stamp against it.</AxisOsNotice>
+          <AxisOsNotice tone="empty">The clock starts once. Every tap gets a timestamp.</AxisOsNotice>
         </section>
       ) : (
         <section className="axis-os-markgrid">
           <button className="axis-os-mark axis-os-mark--keep" onClick={() => mark("KEEP")} type="button">
-            KEEP
+            <strong>Save</strong>
+            <span>Keep it</span>
           </button>
           <button className="axis-os-mark axis-os-mark--fix" onClick={() => mark("FIX")} type="button">
-            FIX
+            <strong>Teach</strong>
+            <span>Fix it</span>
           </button>
         </section>
       )}
 
       <section className="axis-os-list" aria-label="Latest moments">
-        {live && !recentMoments.length && <AxisOsNotice tone="empty">Marked moments show here.</AxisOsNotice>}
+        {live && !recentMoments.length && <AxisOsNotice tone="empty">Moments appear here as you tap.</AxisOsNotice>}
         {recentMoments.map((moment) => (
           <div className="axis-os-row" key={moment.id}>
             <div className="axis-os-row-main">
-              <strong className={moment.ui_label === "KEEP" ? "axis-os-keep" : "axis-os-fix"}>{moment.ui_label}</strong>
+              <strong className={moment.ui_label === "KEEP" ? "axis-os-keep" : "axis-os-fix"}>
+                {MARK_LABELS[moment.ui_label as AxisMomentLabel]}
+              </strong>
             </div>
             <em className="axis-os-row-go">{formatAxisClock(moment.timestamp_seconds)}</em>
           </div>
@@ -176,7 +183,7 @@ export default function AxisEventRecordPage() {
       {live && (
         <footer className="axis-os-livefooter">
           <button disabled={busy} onClick={endLive} type="button">
-            End Live · Moments
+            End Session
           </button>
         </footer>
       )}
