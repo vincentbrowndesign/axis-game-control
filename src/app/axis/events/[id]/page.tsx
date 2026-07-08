@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import {
-  AxisOsFlow,
-  type AxisOsFlowStep,
   AxisOsNotice,
   AxisOsScreenState,
   AxisOsSection,
@@ -36,28 +34,33 @@ function statusRank(status: AxisEventContainer["status"]) {
   return 3;
 }
 
-function nextStepHint(event: AxisEventContainer, momentCount: number) {
-  const rank = statusRank(event.status);
-  if (rank === 0) {
-    return event.source_mode === "record_now"
-      ? "Next: go live and mark moments as they happen."
-      : "Next: add the replay, then go live to mark moments.";
-  }
-  if (rank === 1) return "Live now. Mark moments as they happen.";
-  if (rank === 2) {
-    return momentCount ? "Next: tag your moments, then build the package." : "No moments yet. Go live to mark some.";
-  }
-  return "Saved to memory. Share it or start the next session.";
-}
-
 export default function AxisSessionWorkspacePage() {
   const params = useParams<{ id: string }>();
   const eventId = params.id;
   const { detail, mutate, state } = useAxisEventDetail(eventId);
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
   const [mediaUrl, setMediaUrl] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  async function saveTitle() {
+    if (!detail || titleDraft === null) return;
+    const next = titleDraft.trim();
+    setTitleDraft(null);
+    if (!next || next === detail.event.title) return;
+    const response = await fetch(`/api/axis/events/${eventId}`, {
+      body: JSON.stringify({ title: next }),
+      headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+    }).catch(() => null);
+    if (!response?.ok) {
+      setActionError("Could not rename the session.");
+      return;
+    }
+    const body = (await response.json()) as { event: AxisEventContainer };
+    mutate((current) => ({ ...current, event: body.event }));
+  }
 
   async function attachMedia() {
     if (!detail || !mediaUrl.trim() || busy) return;
@@ -138,54 +141,21 @@ export default function AxisSessionWorkspacePage() {
   const rank = statusRank(event.status);
   const recentMoments = moments.slice(-3).reverse();
 
-  const flow: AxisOsFlowStep[] = [
-    {
-      detail: "Replay · Players",
-      label: "Setup",
-      state: rank === 0 ? "current" : "done",
-    },
-    {
-      detail: "Mark moments",
-      href: `/axis/events/${eventId}/record`,
-      label: "Live",
-      state: rank === 1 ? "current" : rank > 1 ? "done" : "next",
-    },
-    {
-      detail: moments.length ? `${keeps} save · ${fixes} teach` : "Tag moments",
-      href: `/axis/events/${eventId}/review`,
-      label: "Moments",
-      state: rank > 2 || (rank === 2 && reports.length > 0) ? "done" : rank === 2 ? "current" : "next",
-    },
-    {
-      detail: reports.length ? "Draft saved" : "Recap + share",
-      href: `/axis/events/${eventId}/report`,
-      label: "Package",
-      state: rank > 2 ? "done" : rank === 2 && reports.length > 0 ? "current" : "next",
-    },
-    {
-      detail: "Memory",
-      label: "Done",
-      state: rank >= 3 ? "done" : "next",
-    },
-  ];
-
-  // One primary action per screen: the next best step.
+  // One next step, one button.
   const primary =
-    rank === 0 && event.source_mode !== "record_now" && !media.length
-      ? { href: "#axis-setup", label: "Add Replay" }
-      : rank <= 1
-        ? { href: `/axis/events/${eventId}/record`, label: rank === 1 ? "Back to Live" : "Go Live" }
-        : rank === 2
-          ? reports.length || !moments.length
-            ? { href: `/axis/events/${eventId}/report`, label: "Build Package" }
-            : { href: `/axis/events/${eventId}/review`, label: "Tag Moments" }
-          : null;
+    rank <= 1
+      ? { href: `/axis/events/${eventId}/record`, label: rank === 1 ? "Back to Live" : "Go Live" }
+      : rank === 2
+        ? moments.length && !reports.length
+          ? { href: `/axis/events/${eventId}/review`, label: "Tag Moments" }
+          : { href: `/axis/events/${eventId}/report`, label: "Build Package" }
+        : null;
 
   return (
     <AxisSuiteShell
       backHref="/axis"
       backLabel="Axis"
-      title={event.title}
+      title="Session"
       right={
         <AxisOsStatusChip
           label={AXIS_EVENT_STATE_LABELS[event.status]}
@@ -193,8 +163,18 @@ export default function AxisSessionWorkspacePage() {
         />
       }
     >
-      <section className="axis-os-hint">
-        <p>{nextStepHint(event, moments.length)}</p>
+      <section className="axis-os-titleblock">
+        <input
+          aria-label="Session name"
+          className="axis-os-titleedit"
+          onBlur={saveTitle}
+          onChange={(input) => setTitleDraft(input.target.value)}
+          onKeyDown={(key) => {
+            if (key.key === "Enter") (key.target as HTMLInputElement).blur();
+          }}
+          value={titleDraft ?? event.title}
+        />
+        {event.team_name && <p>{event.team_name}</p>}
       </section>
 
       {primary && (
@@ -205,9 +185,6 @@ export default function AxisSessionWorkspacePage() {
         </section>
       )}
 
-      <AxisOsFlow steps={flow} />
-
-      <span id="axis-setup" />
       <AxisOsSection label="Replay" title="Replay">
         {!media.length && <AxisOsNotice tone="empty">No film attached yet.</AxisOsNotice>}
         {media.map((item) => (

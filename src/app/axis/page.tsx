@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AxisOsNotice, AxisOsSection, AxisOsStatusChip } from "../../components/axis/AxisOsKit";
 import { AXIS_APPS, AxisSuiteShell } from "../../components/axis/AxisSuiteShell";
+import { startInstantSession } from "../../lib/axis-instant-session";
 import { AXIS_EVENT_STATE_LABELS, type AxisEventContainer } from "../../lib/axis-event-container";
 
 // Where a session should resume when tapped from home.
@@ -23,10 +24,11 @@ function continueTarget(event: AxisEventContainer): { href: string; label: strin
 
 export default function AxisSuiteHomePage() {
   const router = useRouter();
-  const [liveNow, setLiveNow] = useState<AxisEventContainer[]>([]);
   const [sessions, setSessions] = useState<AxisEventContainer[]>([]);
   const [query, setQuery] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "error" | "offline">("loading");
+  const [busy, setBusy] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,12 +45,11 @@ export default function AxisSuiteHomePage() {
       }
       const events = (await response.json()) as { active: AxisEventContainer[]; recent: AxisEventContainer[] };
       if (cancelled) return;
+      // One list: live first, then in-progress, then finished.
       const active = events.active ?? [];
-      const recent = events.recent ?? [];
-      setLiveNow(active.filter((event) => event.status === "recording" || event.status === "live"));
-      setSessions(
-        [...active.filter((event) => event.status !== "recording" && event.status !== "live"), ...recent].slice(0, 8),
-      );
+      const live = active.filter((event) => event.status === "recording" || event.status === "live");
+      const rest = active.filter((event) => event.status !== "recording" && event.status !== "live");
+      setSessions([...live, ...rest, ...(events.recent ?? [])].slice(0, 8));
       setState("ready");
     })();
     return () => {
@@ -56,19 +57,28 @@ export default function AxisSuiteHomePage() {
     };
   }, []);
 
-  const needsPackage = sessions.filter((event) => event.status === "review");
   const filtered = query.trim()
     ? sessions.filter((event) => event.title.toLowerCase().includes(query.trim().toLowerCase()))
     : sessions;
 
-  const liveTarget = liveNow[0] ? `/axis/events/${liveNow[0].id}/record` : "/axis/events/new";
-  const packageTarget = needsPackage[0] ? `/axis/events/${needsPackage[0].id}/report` : "/axis/packages";
+  async function startSession() {
+    if (busy) return;
+    setBusy(true);
+    setStartError(null);
+    const result = await startInstantSession();
+    if (!result.ok) {
+      setStartError(result.message);
+      setBusy(false);
+      return;
+    }
+    router.push(`/axis/events/${result.id}/record`);
+  }
 
   function runCommand() {
     const text = query.trim().toLowerCase();
     if (!text) return;
     if (text.includes("live")) {
-      router.push(liveTarget);
+      router.push("/axis/live");
       return;
     }
     if (text.includes("player")) {
@@ -76,11 +86,7 @@ export default function AxisSuiteHomePage() {
       return;
     }
     if (text.includes("package") || text.includes("share") || text.includes("sell")) {
-      router.push(packageTarget);
-      return;
-    }
-    if (text.includes("film") || text.includes("replay") || text.includes("clip")) {
-      router.push("/axis/clip-room");
+      router.push("/axis/packages");
       return;
     }
     if (text.includes("start") || text.includes("session") || text.includes("new")) {
@@ -88,7 +94,7 @@ export default function AxisSuiteHomePage() {
       return;
     }
     const match = filtered[0];
-    router.push(match ? continueTarget(match).href : "/axis/events/new");
+    if (match) router.push(continueTarget(match).href);
   }
 
   return (
@@ -103,93 +109,55 @@ export default function AxisSuiteHomePage() {
           placeholder="What are we doing today?"
           value={query}
         />
-        <div className="axis-suite-quick">
-          <Link className="axis-suite-quickbtn axis-suite-quickbtn--primary" href="/axis/events/new">
-            Start Session
-          </Link>
-          <Link className="axis-suite-quickbtn" href="/axis/players">
-            Find Player
-          </Link>
-          <Link className="axis-suite-quickbtn" href={liveTarget}>
-            Open Live
-          </Link>
-          <Link className="axis-suite-quickbtn" href={packageTarget}>
-            Build Package
-          </Link>
-        </div>
+        <button className="axis-os-primary" disabled={busy} onClick={startSession} type="button">
+          {busy ? "Starting…" : "Start Session"}
+        </button>
+        <Link className="axis-os-setuplink" href="/axis/events/new">
+          Set up a game, video, or replay session →
+        </Link>
+        {startError && <AxisOsNotice tone="error">{startError}</AxisOsNotice>}
       </section>
 
       <section className="axis-suite-homeapps" aria-label="Axis apps">
         {AXIS_APPS.map((app) => (
           <Link className="axis-suite-app axis-suite-app--card" href={app.href} key={app.name}>
-            <span className="axis-suite-glyph">{app.glyph}</span>
+            <span className={app.tone === "live" ? "axis-suite-glyph axis-suite-glyph--live" : "axis-suite-glyph"}>
+              {app.glyph}
+            </span>
             <strong>{app.name}</strong>
             <span className="axis-suite-app-sub">{app.sub}</span>
           </Link>
         ))}
       </section>
 
-      {state === "loading" && (
-        <section className="axis-os-list" aria-label="Loading">
-          <AxisOsNotice tone="loading">Loading your sessions…</AxisOsNotice>
-        </section>
-      )}
-      {state === "offline" && (
-        <section className="axis-os-list" aria-label="Offline">
-          <AxisOsNotice tone="offline">Session memory is offline right now.</AxisOsNotice>
-        </section>
-      )}
-      {state === "error" && (
-        <section className="axis-os-list" aria-label="Error">
-          <AxisOsNotice tone="error">Sessions did not load. Pull to refresh.</AxisOsNotice>
-        </section>
-      )}
-
-      {state === "ready" && liveNow.length > 0 && (
-        <AxisOsSection label="Live now" title="Live now">
-          {liveNow.map((event) => (
-            <Link className="axis-os-row" href={`/axis/events/${event.id}/record`} key={event.id}>
+      <AxisOsSection label="Today" title="Today">
+        {state === "loading" && <AxisOsNotice tone="loading">Loading your sessions…</AxisOsNotice>}
+        {state === "offline" && <AxisOsNotice tone="offline">Session memory is offline right now.</AxisOsNotice>}
+        {state === "error" && <AxisOsNotice tone="error">Sessions did not load. Pull to refresh.</AxisOsNotice>}
+        {state === "ready" && !sessions.length && (
+          <AxisOsNotice tone="empty">Nothing yet. Start a session.</AxisOsNotice>
+        )}
+        {state === "ready" && sessions.length > 0 && !filtered.length && (
+          <AxisOsNotice tone="empty">No sessions match “{query}”.</AxisOsNotice>
+        )}
+        {filtered.map((event) => {
+          const target = continueTarget(event);
+          const isLive = event.status === "recording" || event.status === "live";
+          return (
+            <Link className="axis-os-row" href={target.href} key={event.id}>
               <div className="axis-os-row-main">
                 <strong>{event.title}</strong>
+                <span>{AXIS_EVENT_STATE_LABELS[event.status]}</span>
               </div>
-              <AxisOsStatusChip label="Live" tone="live" />
-            </Link>
-          ))}
-        </AxisOsSection>
-      )}
-
-      {state === "ready" && (
-        <AxisOsSection label="Recent sessions" title="Recent sessions">
-          {!filtered.length && !query && <AxisOsNotice tone="empty">Nothing yet. Start a session.</AxisOsNotice>}
-          {!filtered.length && query && <AxisOsNotice tone="empty">No sessions match “{query}”.</AxisOsNotice>}
-          {filtered.map((event) => {
-            const target = continueTarget(event);
-            return (
-              <Link className="axis-os-row" href={target.href} key={event.id}>
-                <div className="axis-os-row-main">
-                  <strong>{event.title}</strong>
-                  <span>{AXIS_EVENT_STATE_LABELS[event.status]}</span>
-                </div>
+              {isLive ? (
+                <AxisOsStatusChip label="Live" tone="live" />
+              ) : (
                 <em className="axis-os-row-go">{target.label}</em>
-              </Link>
-            );
-          })}
-        </AxisOsSection>
-      )}
-
-      {state === "ready" && needsPackage.length > 0 && (
-        <AxisOsSection label="Needs package" title="Needs package">
-          {needsPackage.map((event) => (
-            <Link className="axis-os-row" href={`/axis/events/${event.id}/report`} key={event.id}>
-              <div className="axis-os-row-main">
-                <strong>{event.title}</strong>
-                <span>Moments marked, package not built</span>
-              </div>
-              <em className="axis-os-row-go">Build →</em>
+              )}
             </Link>
-          ))}
-        </AxisOsSection>
-      )}
+          );
+        })}
+      </AxisOsSection>
     </AxisSuiteShell>
   );
 }

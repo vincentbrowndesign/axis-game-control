@@ -9,6 +9,19 @@
   --axis-ink: #f4f4f0;
   --axis-muted: rgba(244, 244, 240, 0.58);
   --axis-live: #a8d933;
+
+  /* Axis product tokens (clarity pass). One identity, every family draws from these.
+     Lime = primary/success/KEEP only. Orange = FIX/live only. */
+  --ax-bg: #050706;
+  --ax-bg-deep: #020302;
+  --ax-pop: #0c0e0c;
+  --ax-ink: #f6f8f0;
+  --ax-lime: #9dff45;
+  --ax-orange: #ff5c39;
+  --ax-amber: #ffb347;
+  --ax-radius: 0.9rem;
+  --ax-radius-sm: 0.65rem;
+  --ax-pad: clamp(1rem, 3vw, 2rem);
 }
 
 .axis-simple-page {
@@ -257,7 +270,7 @@
   display: flex;
   font-size: clamp(1rem, 2.2vw, 1.55rem);
   min-height: 6rem;
-  padding: 1rem clamp(1rem, 3vw, 2rem);
+  padding: 1rem var(--ax-pad);
 }
 
 .axis-simple-actions a:first-child {
@@ -9700,8 +9713,8 @@ button.axis-review-row:focus-visible {
 .axis-measures-shell {
   background:
     linear-gradient(180deg, rgba(142, 255, 67, 0.055), transparent 22rem),
-    #050706;
-  color: #f6f8f0;
+    var(--ax-bg);
+  color: var(--ax-ink);
   font-family: Arial, Helvetica, sans-serif;
   min-height: 100dvh;
 }
@@ -9730,7 +9743,7 @@ button.axis-review-row:focus-visible {
   gap: 1rem;
   justify-content: space-between;
   min-height: 4.5rem;
-  padding: 0.9rem clamp(1rem, 3vw, 2rem);
+  padding: 0.9rem var(--ax-pad);
 }
 
 .axis-measures-home header span,
@@ -9787,7 +9800,7 @@ button.axis-review-row:focus-visible {
   background: rgba(246, 248, 240, 0.06);
   border: 1px solid rgba(246, 248, 240, 0.16);
   border-radius: 0;
-  color: #f6f8f0;
+  color: var(--ax-ink);
   cursor: pointer;
   min-height: 2.75rem;
   padding: 0.72rem 0.9rem;
@@ -9796,15 +9809,15 @@ button.axis-review-row:focus-visible {
 .axis-instrument-action,
 .axis-btn--primary,
 .axis-tab--active {
-  background: #9dff45;
-  border-color: #9dff45;
-  color: #050706;
+  background: var(--ax-lime);
+  border-color: var(--ax-lime);
+  color: var(--ax-bg);
 }
 
 .axis-instrument-action--secondary {
   background: rgba(246, 248, 240, 0.06);
   border-color: rgba(157, 255, 69, 0.42);
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-measures-home section,
@@ -9820,7 +9833,7 @@ button.axis-review-row:focus-visible {
 .axis-measures-index section p,
 .axis-stage-head span,
 .axis-measures-simple article span {
-  color: #9dff45;
+  color: var(--ax-lime);
   font-size: 0.78rem;
   margin: 0;
 }
@@ -9844,8 +9857,8 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-measures-home section a {
-  background: #f6f8f0;
-  color: #050706;
+  background: var(--ax-ink);
+  color: var(--ax-bg);
   font-weight: 900;
   justify-self: start;
   min-height: 3rem;
@@ -9859,7 +9872,7 @@ button.axis-review-row:focus-visible {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  padding: 1rem clamp(1rem, 3vw, 2rem) 2rem;
+  padding: 1rem var(--ax-pad) 2rem;
 }
 
 .axis-measures-home > div span,
@@ -9887,7 +9900,7 @@ button.axis-review-row:focus-visible {
 
 .axis-measures-index > div strong,
 .axis-measures-simple article strong {
-  color: #f6f8f0;
+  color: var(--ax-ink);
   font-size: clamp(1.6rem, 4vw, 3.2rem);
   line-height: 0.9;
   text-transform: uppercase;
@@ -9906,7 +9919,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-calibrate-brand {
-  color: #9dff45;
+  color: var(--ax-lime);
   font-size: 1rem;
   text-decoration: none;
 }
@@ -9920,7 +9933,7 @@ button.axis-review-row:focus-visible {
 .axis-field select {
   background: #0b0d0b;
   border: 1px solid rgba(246, 248, 240, 0.18);
-  color: #f6f8f0;
+  color: var(--ax-ink);
   min-height: 2.6rem;
   padding: 0 0.75rem;
 }
@@ -9953,7 +9966,7 @@ button.axis-review-row:focus-visible {
 .axis-mode-button {
   background: rgba(246, 248, 240, 0.035);
   border: 1px solid rgba(246, 248, 240, 0.12);
-  color: #f6f8f0;
+  color: var(--ax-ink);
   cursor: pointer;
   display: grid;
   gap: 0.32rem;
@@ -10128,7 +10141,7 @@ button.axis-review-row:focus-visible {
 .axis-panel-header {
   align-items: center;
   border-bottom: 1px solid rgba(246, 248, 240, 0.1);
-  color: #f6f8f0;
+  color: var(--ax-ink);
   display: flex;
   font-size: 0.68rem;
   justify-content: space-between;
@@ -10141,7 +10154,7 @@ button.axis-review-row:focus-visible {
 .axis-conf--ok,
 .axis-delta--pos,
 .axis-proof-delta--pos {
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-landmark-group-label,
@@ -10170,7 +10183,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-dot--ok {
-  background: #9dff45;
+  background: var(--ax-lime);
 }
 
 .axis-dot--warn {
@@ -10194,7 +10207,7 @@ button.axis-review-row:focus-visible {
 .axis-rep-label,
 .axis-proof-card,
 .axis-record-preview {
-  color: #f6f8f0;
+  color: var(--ax-ink);
 }
 
 .axis-measurement-row {
@@ -10202,7 +10215,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-measurement-value {
-  color: #9dff45;
+  color: var(--ax-lime);
   font-weight: 900;
 }
 
@@ -10215,7 +10228,7 @@ button.axis-review-row:focus-visible {
 .axis-rep-chip {
   background: rgba(246, 248, 240, 0.04);
   border: 1px solid rgba(246, 248, 240, 0.13);
-  color: #f6f8f0;
+  color: var(--ax-ink);
   cursor: pointer;
   display: grid;
   gap: 0.18rem;
@@ -10243,7 +10256,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-record-preview strong {
-  color: #f6f8f0;
+  color: var(--ax-ink);
   font-size: clamp(1.4rem, 3vw, 2.4rem);
   line-height: 0.95;
   text-transform: uppercase;
@@ -10267,7 +10280,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-record-preview dd {
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-proof-card-header,
@@ -10287,7 +10300,7 @@ button.axis-review-row:focus-visible {
 
 .axis-proof-card-label,
 .axis-proof-card-footer span {
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-proof-card-measurements {
@@ -10335,8 +10348,8 @@ button.axis-review-row:focus-visible {
 /* Axis Calibrate compact instrument */
 
 .axis-calibrate-instrument {
-  background: #050706;
-  color: #f6f8f0;
+  background: var(--ax-bg);
+  color: var(--ax-ink);
   display: grid;
   font-family: Arial, Helvetica, sans-serif;
   grid-template-rows: 3.5rem minmax(0, 1fr);
@@ -10384,7 +10397,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-calibrate-instrument-topbar > strong {
-  color: #9dff45;
+  color: var(--ax-lime);
   font-size: 0.95rem;
 }
 
@@ -10405,7 +10418,7 @@ button.axis-review-row:focus-visible {
   background: #080a08;
   border: 1px solid rgba(246, 248, 240, 0.16);
   border-radius: 0;
-  color: #f6f8f0;
+  color: var(--ax-ink);
   min-height: 2rem;
   min-width: 0;
   padding: 0 0.45rem;
@@ -10418,7 +10431,7 @@ button.axis-review-row:focus-visible {
   align-items: center;
   background: rgba(246, 248, 240, 0.05);
   border: 1px solid rgba(246, 248, 240, 0.16);
-  color: #f6f8f0;
+  color: var(--ax-ink);
   display: inline-flex;
   font-size: 0.64rem;
   justify-content: center;
@@ -10427,15 +10440,15 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-confidence-pill {
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-calibrate-instrument-topbar > button,
 .axis-capture-command-row button:first-child,
 .axis-proof-strip button {
-  background: #9dff45;
-  border-color: #9dff45;
-  color: #050706;
+  background: var(--ax-lime);
+  border-color: var(--ax-lime);
+  color: var(--ax-bg);
 }
 
 .axis-calibrate-workbench {
@@ -10478,7 +10491,7 @@ button.axis-review-row:focus-visible {
 
 .axis-mode-rail button[data-active="true"] {
   background: rgba(157, 255, 69, 0.1);
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-calibrate-capture {
@@ -10504,7 +10517,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-test-strip strong {
-  color: #f6f8f0;
+  color: var(--ax-ink);
   font-size: 0.98rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -10668,15 +10681,15 @@ button.axis-review-row:focus-visible {
 .axis-compact-reps button {
   background: rgba(246, 248, 240, 0.05);
   border: 1px solid rgba(246, 248, 240, 0.16);
-  color: #f6f8f0;
+  color: var(--ax-ink);
   flex: 0 0 auto;
   height: 1.45rem;
   min-width: 2rem;
 }
 
 .axis-compact-reps button[data-active="true"] {
-  border-color: #9dff45;
-  color: #9dff45;
+  border-color: var(--ax-lime);
+  color: var(--ax-lime);
 }
 
 .axis-measurement-rail {
@@ -10714,7 +10727,7 @@ button.axis-review-row:focus-visible {
 
 .axis-landmark-chips span {
   border: 1px solid rgba(157, 255, 69, 0.35);
-  color: #f6f8f0;
+  color: var(--ax-ink);
   font-size: 0.66rem;
   line-height: 1;
   padding: 0.28rem 0.35rem;
@@ -10739,7 +10752,7 @@ button.axis-review-row:focus-visible {
 .axis-confidence-readout strong,
 .axis-live-measurements strong,
 .axis-baseline-list strong {
-  color: #9dff45;
+  color: var(--ax-lime);
   font-size: 0.72rem;
   white-space: nowrap;
 }
@@ -10786,7 +10799,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-proof-strip strong {
-  color: #f6f8f0;
+  color: var(--ax-ink);
   font-size: 0.78rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -11171,13 +11184,13 @@ button.axis-review-row:focus-visible {
   }
 
   .axis-rim-box {
-    border: 2px solid #9dff45;
+    border: 2px solid var(--ax-lime);
     box-shadow: 0 0 0 999px rgba(16, 21, 16, 0.08), 0 0 22px rgba(157, 255, 69, 0.34);
     position: absolute;
   }
 
   .axis-rim-box span {
-    background: #9dff45;
+    background: var(--ax-lime);
     color: #101510;
     font-size: 0.58rem;
     font-weight: 900;
@@ -11208,8 +11221,8 @@ button.axis-review-row:focus-visible {
   }
 
   .axis-rim-actions button:last-child {
-    background: #9dff45;
-    border-color: #9dff45;
+    background: var(--ax-lime);
+    border-color: var(--ax-lime);
   }
 
   .axis-rim-actions button:disabled {
@@ -11528,8 +11541,8 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-camera-moment-panel button:last-child {
-  background: #9dff45;
-  border-color: #9dff45;
+  background: var(--ax-lime);
+  border-color: var(--ax-lime);
   color: #101510;
 }
 
@@ -11626,7 +11639,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-camera-topbar--instrument > div:first-child strong {
-  color: #9dff45;
+  color: var(--ax-lime);
   font-size: 1rem;
 }
 
@@ -11644,7 +11657,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-camera-stage {
-  background: #050706;
+  background: var(--ax-bg);
   border: 0;
   border-radius: 0;
 }
@@ -11671,7 +11684,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-camera-readout strong {
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-camera-detection-chips {
@@ -11757,7 +11770,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-camera-query-input button {
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-camera-query-status {
@@ -11789,7 +11802,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-camera-query-status span[data-active="true"] {
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-camera-query-status button {
@@ -12139,7 +12152,7 @@ button.axis-review-row:focus-visible {
 .axis-lab-registry article {
   background: #fff;
   border: 1px solid rgba(16, 21, 16, 0.1);
-  border-radius: 0.85rem;
+  border-radius: var(--ax-radius);
   display: grid;
   gap: 0.42rem;
   padding: 0.9rem;
@@ -12167,8 +12180,8 @@ button.axis-review-row:focus-visible {
 .axis-os {
   background:
     linear-gradient(180deg, rgba(142, 255, 67, 0.028), transparent 22rem),
-    #050706;
-  color: #f6f8f0;
+    var(--ax-bg);
+  color: var(--ax-ink);
   display: grid;
   align-content: start;
   font-family: Arial, Helvetica, sans-serif;
@@ -12208,7 +12221,7 @@ button.axis-review-row:focus-visible {
   gap: 1rem;
   justify-content: space-between;
   min-height: 4rem;
-  padding: 0.75rem clamp(1rem, 3vw, 2rem);
+  padding: 0.75rem var(--ax-pad);
 }
 
 .axis-os-brand {
@@ -12258,18 +12271,18 @@ button.axis-review-row:focus-visible {
 
 .axis-os-status--live {
   border-color: rgba(255, 92, 57, 0.55);
-  color: #ff5c39;
+  color: var(--ax-orange);
 }
 
 .axis-os-status--ready {
   border-color: rgba(157, 255, 69, 0.5);
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-os-hero {
   display: grid;
   gap: 0.9rem;
-  padding: clamp(1.25rem, 4vw, 2.5rem) clamp(1rem, 3vw, 2rem) 0;
+  padding: clamp(1.25rem, 4vw, 2.5rem) var(--ax-pad) 0;
 }
 
 .axis-os-hero p {
@@ -12281,10 +12294,10 @@ button.axis-review-row:focus-visible {
 
 .axis-os-primary {
   appearance: none;
-  background: #9dff45;
-  border: 1px solid #9dff45;
-  border-radius: 0.85rem;
-  color: #050706;
+  background: var(--ax-lime);
+  border: 1px solid var(--ax-lime);
+  border-radius: var(--ax-radius);
+  color: var(--ax-bg);
   cursor: pointer;
   display: block;
   font-size: clamp(1.1rem, 3.2vw, 1.35rem);
@@ -12305,7 +12318,7 @@ button.axis-review-row:focus-visible {
 .axis-os-primary--quiet {
   background: rgba(246, 248, 240, 0.06);
   border: 1px solid rgba(246, 248, 240, 0.35);
-  color: #f6f8f0;
+  color: var(--ax-ink);
   font-size: 1rem;
   min-height: 3.25rem;
 }
@@ -12315,7 +12328,7 @@ button.axis-review-row:focus-visible {
 .axis-os-liveactions {
   display: grid;
   gap: 0.7rem;
-  padding: 0 clamp(1rem, 3vw, 2rem);
+  padding: 0 var(--ax-pad);
 }
 
 .axis-os h2 {
@@ -12336,91 +12349,76 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-notice--error {
-  color: #ff5c39;
+  color: var(--ax-orange);
 }
 
 .axis-os-notice--offline {
-  color: #ffb347;
+  color: var(--ax-amber);
 }
 
 .axis-os-notice--saved {
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-os-notice a {
-  color: #9dff45;
+  color: var(--ax-lime);
   text-decoration: underline;
 }
 
 .axis-os > .axis-os-notice {
-  padding: 0 clamp(1rem, 3vw, 2rem);
+  padding: 0 var(--ax-pad);
 }
 
 .axis-os-screenstate {
-  padding: clamp(1.5rem, 5vw, 3rem) clamp(1rem, 3vw, 2rem);
+  padding: clamp(1.5rem, 5vw, 3rem) var(--ax-pad);
 }
 
 .axis-os-hint {
-  padding: 0 clamp(1rem, 3vw, 2rem);
+  padding: 0 var(--ax-pad);
 }
 
 .axis-os-hint p {
-  border-left: 3px solid #9dff45;
+  border-left: 3px solid var(--ax-lime);
   color: rgba(246, 248, 240, 0.75);
   font-size: 0.9rem;
   margin: 0;
   padding: 0.45rem 0.75rem;
 }
 
-.axis-os-flow {
+.axis-os-titleblock {
   display: grid;
-  gap: 0.5rem;
-  grid-auto-columns: minmax(5.75rem, 1fr);
-  grid-auto-flow: column;
-  overflow-x: auto;
-  padding: 0 clamp(1rem, 3vw, 2rem);
-}
-
-.axis-os-flowstep {
-  border: 1px solid rgba(246, 248, 240, 0.14);
-  border-radius: 0.8rem;
-  color: inherit;
-  display: grid;
-  align-content: start;
   gap: 0.25rem;
-  min-height: 4.5rem;
-  padding: 0.65rem 0.7rem;
+  padding: clamp(1rem, 3.5vw, 2rem) var(--ax-pad) 0;
 }
 
-.axis-os-flowstep strong {
-  font-size: 0.92rem;
-  font-weight: 700;
+.axis-os-titleblock p {
+  color: rgba(246, 248, 240, 0.6);
+  font-size: 0.9rem;
+  margin: 0;
 }
 
-.axis-os-flowstep span {
-  color: rgba(246, 248, 240, 0.62);
-  font-size: 0.7rem;
+.axis-os-titleedit {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--ax-ink);
+  font: inherit;
+  font-size: clamp(1.5rem, 5vw, 2.1rem);
+  font-weight: 800;
+  padding: 0 0 0.2rem;
+  width: 100%;
 }
 
-.axis-os-flowstep--current {
-  border-color: rgba(246, 248, 240, 0.85);
-  outline: 1px solid rgba(246, 248, 240, 0.85);
+.axis-os-titleedit:focus {
+  border-bottom-color: rgba(246, 248, 240, 0.4);
+  outline: none;
 }
 
-.axis-os-flowstep--current strong {
-  color: #f6f8f0;
-}
-
-.axis-os-flowstep--done {
-  background: rgba(246, 248, 240, 0.07);
-}
-
-.axis-os-flowstep--done strong {
-  color: rgba(246, 248, 240, 0.85);
-}
-
-.axis-os-flowstep--next {
-  opacity: 0.75;
+.axis-os-setuplink {
+  color: rgba(246, 248, 240, 0.65);
+  font-size: 0.9rem;
+  font-weight: 600;
+  justify-self: center;
 }
 
 .axis-os-row {
@@ -12428,7 +12426,7 @@ button.axis-review-row:focus-visible {
   appearance: none;
   background: rgba(246, 248, 240, 0.05);
   border: 1px solid rgba(246, 248, 240, 0.12);
-  border-radius: 0.9rem;
+  border-radius: var(--ax-radius);
   color: inherit;
   cursor: pointer;
   display: flex;
@@ -12472,7 +12470,7 @@ button.axis-review-row:focus-visible {
 .axis-os-quietfooter {
   display: flex;
   justify-content: flex-end;
-  padding: 1rem clamp(1rem, 3vw, 2rem) 0;
+  padding: 1rem var(--ax-pad) 0;
 }
 
 .axis-os-quietfooter a {
@@ -12501,8 +12499,8 @@ button.axis-review-row:focus-visible {
 .axis-os-inline input {
   background: rgba(246, 248, 240, 0.06);
   border: 1px solid rgba(246, 248, 240, 0.16);
-  border-radius: 0.65rem;
-  color: #f6f8f0;
+  border-radius: var(--ax-radius-sm);
+  color: var(--ax-ink);
   font: inherit;
   font-size: 1rem;
   min-height: 3rem;
@@ -12517,7 +12515,7 @@ button.axis-review-row:focus-visible {
 .axis-os-field input:focus,
 .axis-os-field textarea:focus,
 .axis-os-inline input:focus {
-  border-color: #9dff45;
+  border-color: var(--ax-lime);
   outline: none;
 }
 
@@ -12532,7 +12530,7 @@ button.axis-review-row:focus-visible {
   background: rgba(246, 248, 240, 0.06);
   border: 1px solid rgba(246, 248, 240, 0.16);
   border-radius: 999px;
-  color: #f6f8f0;
+  color: var(--ax-ink);
   cursor: pointer;
   font-size: 0.86rem;
   font-weight: 600;
@@ -12541,9 +12539,9 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-chip--on {
-  background: #f6f8f0;
-  border-color: #f6f8f0;
-  color: #050706;
+  background: var(--ax-ink);
+  border-color: var(--ax-ink);
+  color: var(--ax-bg);
 }
 
 .axis-os-pill {
@@ -12565,7 +12563,7 @@ button.axis-review-row:focus-visible {
   appearance: none;
   background: rgba(246, 248, 240, 0.05);
   border: 1px solid rgba(246, 248, 240, 0.16);
-  border-radius: 0.9rem;
+  border-radius: var(--ax-radius);
   color: inherit;
   cursor: pointer;
   display: grid;
@@ -12593,7 +12591,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-source--on strong {
-  color: #f6f8f0;
+  color: var(--ax-ink);
 }
 
 /* Live marker screen */
@@ -12604,13 +12602,13 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-livebadge--on {
-  color: #ff5c39;
+  color: var(--ax-orange);
 }
 
 /* Broadcast stage: the camera surface mounts here in a later release. */
 
 .axis-os-stage {
-  padding: 0 clamp(1rem, 3vw, 2rem);
+  padding: 0 var(--ax-pad);
 }
 
 .axis-os-stage-surface {
@@ -12618,9 +12616,9 @@ button.axis-review-row:focus-visible {
   aspect-ratio: 16 / 10;
   background:
     radial-gradient(ellipse at center, rgba(246, 248, 240, 0.045), transparent 70%),
-    #020302;
+    var(--ax-bg-deep);
   border: 1px solid rgba(246, 248, 240, 0.14);
-  border-radius: 0.9rem;
+  border-radius: var(--ax-radius);
   display: grid;
   gap: 0.4rem;
   justify-items: center;
@@ -12656,7 +12654,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-stage-surface--live .axis-os-stage-signal {
-  color: #ff5c39;
+  color: var(--ax-orange);
 }
 
 .axis-os-stage-clock {
@@ -12669,7 +12667,7 @@ button.axis-review-row:focus-visible {
 
 .axis-os-stage-mark {
   bottom: 0.6rem;
-  color: #9dff45;
+  color: var(--ax-lime);
   font-size: 0.72rem;
   left: 0;
   position: absolute;
@@ -12694,7 +12692,7 @@ button.axis-review-row:focus-visible {
   border: 1px solid rgba(246, 248, 240, 0.35);
   border-radius: 0;
   bottom: 0.6rem;
-  color: #f6f8f0;
+  color: var(--ax-ink);
   cursor: pointer;
   font-size: 0.72rem;
   min-height: 2.5rem;
@@ -12734,13 +12732,13 @@ button.axis-review-row:focus-visible {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 0 clamp(1rem, 3vw, 2rem);
+  padding: 0 var(--ax-pad);
 }
 
 .axis-os-mark {
   appearance: none;
   border: none;
-  border-radius: 1rem;
+  border-radius: var(--ax-radius);
   cursor: pointer;
   display: grid;
   gap: 0.2rem;
@@ -12765,26 +12763,26 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-mark--keep {
-  background: #9dff45;
-  color: #050706;
+  background: var(--ax-lime);
+  color: var(--ax-bg);
 }
 
 .axis-os-mark--fix {
-  background: #ff5c39;
-  color: #050706;
+  background: var(--ax-orange);
+  color: var(--ax-bg);
 }
 
 .axis-os-keep {
-  color: #9dff45;
+  color: var(--ax-lime);
 }
 
 .axis-os-fix {
-  color: #ff5c39;
+  color: var(--ax-orange);
 }
 
 .axis-os-livefooter {
   display: grid;
-  padding: 0 clamp(1rem, 3vw, 2rem);
+  padding: 0 var(--ax-pad);
 }
 
 .axis-os-livefooter a,
@@ -12792,8 +12790,8 @@ button.axis-review-row:focus-visible {
   appearance: none;
   background: rgba(246, 248, 240, 0.06);
   border: 1px solid rgba(246, 248, 240, 0.2);
-  border-radius: 0.75rem;
-  color: #f6f8f0;
+  border-radius: var(--ax-radius-sm);
+  color: var(--ax-ink);
   cursor: pointer;
   font-size: 0.95rem;
   font-weight: 700;
@@ -12811,8 +12809,8 @@ button.axis-review-row:focus-visible {
   appearance: none;
   background: rgba(246, 248, 240, 0.06);
   border: 1px solid rgba(246, 248, 240, 0.35);
-  border-radius: 0.65rem;
-  color: #f6f8f0;
+  border-radius: var(--ax-radius-sm);
+  color: var(--ax-ink);
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: 700;
@@ -12832,17 +12830,17 @@ button.axis-review-row:focus-visible {
   background: rgba(246, 248, 240, 0.04);
   border: 1px solid rgba(246, 248, 240, 0.12);
   border-left-width: 3px;
-  border-radius: 0.9rem;
+  border-radius: var(--ax-radius);
   display: grid;
   overflow: hidden;
 }
 
 .axis-os-card--keep {
-  border-left-color: #9dff45;
+  border-left-color: var(--ax-lime);
 }
 
 .axis-os-card--fix {
-  border-left-color: #ff5c39;
+  border-left-color: var(--ax-orange);
 }
 
 .axis-os-card--open {
@@ -12909,7 +12907,7 @@ button.axis-review-row:focus-visible {
 
 .axis-os-minichip--target {
   border-color: rgba(246, 248, 240, 0.35);
-  color: #f6f8f0;
+  color: var(--ax-ink);
 }
 
 .axis-os-card-note {
@@ -12919,9 +12917,9 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-os-savedchip {
-  background: #9dff45;
+  background: var(--ax-lime);
   border-radius: 999px;
-  color: #050706;
+  color: var(--ax-bg);
   font-size: 0.72rem;
   font-weight: 700;
   padding: 0.2rem 0.6rem;
@@ -12957,8 +12955,8 @@ button.axis-review-row:focus-visible {
 .axis-home {
   background:
     linear-gradient(180deg, rgba(142, 255, 67, 0.04), transparent 26rem),
-    #050706;
-  color: #f6f8f0;
+    var(--ax-bg);
+  color: var(--ax-ink);
   display: grid;
   align-content: start;
   font-family: Arial, Helvetica, sans-serif;
@@ -13040,17 +13038,17 @@ button.axis-review-row:focus-visible {
 
 .axis-home-cta {
   border: 1px solid rgba(246, 248, 240, 0.3);
-  border-radius: 0.8rem;
-  color: #f6f8f0;
+  border-radius: var(--ax-radius);
+  color: var(--ax-ink);
   font-size: 0.95rem;
   min-height: 3.25rem;
   padding: 1rem 1.3rem;
 }
 
 .axis-home-cta--primary {
-  background: #9dff45;
-  border-color: #9dff45;
-  color: #050706;
+  background: var(--ax-lime);
+  border-color: var(--ax-lime);
+  color: var(--ax-bg);
 }
 
 .axis-home-steps {
@@ -13123,7 +13121,7 @@ button.axis-review-row:focus-visible {
   gap: 1rem;
   justify-content: space-between;
   min-height: 4rem;
-  padding: 0.75rem clamp(1rem, 3vw, 2rem);
+  padding: 0.75rem var(--ax-pad);
 }
 
 .axis-suite-actions {
@@ -13152,7 +13150,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-suite-dot {
-  background: #9dff45;
+  background: var(--ax-lime);
   border-radius: 999px;
   height: 0.5rem;
   position: absolute;
@@ -13185,9 +13183,9 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-suite-pop {
-  background: #0c0e0c;
+  background: var(--ax-pop);
   border: 1px solid rgba(246, 248, 240, 0.16);
-  border-radius: 1rem;
+  border-radius: var(--ax-radius);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
   padding: 0.9rem;
   position: absolute;
@@ -13217,7 +13215,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-suite-app {
-  border-radius: 0.8rem;
+  border-radius: var(--ax-radius);
   color: inherit;
   display: grid;
   gap: 0.3rem;
@@ -13234,8 +13232,8 @@ button.axis-review-row:focus-visible {
   align-items: center;
   background: rgba(246, 248, 240, 0.08);
   border: 1px solid rgba(246, 248, 240, 0.14);
-  border-radius: 0.7rem;
-  color: #f6f8f0;
+  border-radius: var(--ax-radius-sm);
+  color: var(--ax-ink);
   display: flex;
   font-size: 1rem;
   font-weight: 800;
@@ -13252,6 +13250,23 @@ button.axis-review-row:focus-visible {
 .axis-suite-app-sub {
   color: rgba(246, 248, 240, 0.55);
   font-size: 0.7rem;
+}
+
+.axis-suite-glyph--live {
+  color: var(--ax-orange);
+}
+
+.axis-suite-newitem--divider {
+  border-top: 1px solid rgba(246, 248, 240, 0.12);
+  display: flex;
+  gap: 1.25rem;
+  padding-top: 0.8rem;
+}
+
+.axis-suite-newitem--divider a {
+  color: rgba(246, 248, 240, 0.7);
+  font-size: 0.85rem;
+  font-weight: 700;
 }
 
 .axis-suite-newitem {
@@ -13271,7 +13286,7 @@ button.axis-review-row:focus-visible {
 }
 
 .axis-suite-newitem a {
-  color: #9dff45;
+  color: var(--ax-lime);
   font-size: 0.85rem;
   font-weight: 700;
 }
@@ -13279,14 +13294,14 @@ button.axis-review-row:focus-visible {
 .axis-suite-hero {
   display: grid;
   gap: 0.9rem;
-  padding: clamp(1.5rem, 5vw, 3rem) clamp(1rem, 3vw, 2rem) 0;
+  padding: clamp(1.5rem, 5vw, 3rem) var(--ax-pad) 0;
 }
 
 .axis-suite-cmd {
   background: rgba(246, 248, 240, 0.06);
   border: 1px solid rgba(246, 248, 240, 0.2);
   border-radius: 999px;
-  color: #f6f8f0;
+  color: var(--ax-ink);
   font: inherit;
   font-size: 1.05rem;
   min-height: 3.6rem;
@@ -13299,35 +13314,11 @@ button.axis-review-row:focus-visible {
   outline: none;
 }
 
-.axis-suite-quick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.axis-suite-quickbtn {
-  align-items: center;
-  border: 1px solid rgba(246, 248, 240, 0.25);
-  border-radius: 999px;
-  color: #f6f8f0;
-  display: inline-flex;
-  font-size: 0.92rem;
-  font-weight: 700;
-  min-height: 2.9rem;
-  padding: 0.7rem 1.1rem;
-}
-
-.axis-suite-quickbtn--primary {
-  background: #9dff45;
-  border-color: #9dff45;
-  color: #050706;
-}
-
 .axis-suite-homeapps {
   display: grid;
   gap: 0.6rem;
   grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
-  padding: 0 clamp(1rem, 3vw, 2rem);
+  padding: 0 var(--ax-pad);
 }
 
 .axis-suite-app--card {

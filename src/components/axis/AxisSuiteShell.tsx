@@ -3,63 +3,50 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 
-// Suite chrome for Axis product pages: brand mark, app launcher,
-// what's-new notice, account/help, and an optional command bar slot.
-// Live/field mode keeps its own minimal header on purpose.
+// Suite chrome for Axis product pages: brand mark, app launcher, and one
+// overflow menu (what's new, public site, help). Live/field mode keeps its
+// own minimal header on purpose.
 
 export type AxisSuiteApp = {
   name: string;
   sub: string;
   href: string;
   glyph: string;
+  tone?: "live";
 };
 
+// Every app lands exactly where its word promises.
 export const AXIS_APPS: AxisSuiteApp[] = [
-  { glyph: "S", href: "/axis", name: "Sessions", sub: "Capture work" },
-  { glyph: "L", href: "/axis/events/new", name: "Live", sub: "Field mode" },
-  { glyph: "F", href: "/axis/clip-room", name: "Film", sub: "Replay + clips" },
-  { glyph: "P", href: "/axis/players", name: "Players", sub: "Profiles" },
-  { glyph: "K", href: "/axis/packages", name: "Packages", sub: "Share + sell" },
-  { glyph: "I", href: "/axis/lab/datasets", name: "Intelligence", sub: "Data + memory" },
-  { glyph: "X", href: "/axis/lab", name: "Lab", sub: "Experiments" },
+  { glyph: "▤", href: "/axis/sessions", name: "Sessions", sub: "All capture work" },
+  { glyph: "●", href: "/axis/live", name: "Live", sub: "Field mode", tone: "live" },
+  { glyph: "◎", href: "/axis/players", name: "Players", sub: "Profiles" },
+  { glyph: "▣", href: "/axis/packages", name: "Packages", sub: "Share + sell" },
+  { glyph: "✦", href: "/axis/lab/datasets", name: "Intelligence", sub: "Data + memory" },
+  { glyph: "△", href: "/axis/lab", name: "Lab", sub: "Experiments" },
 ];
 
 const WHATS_NEW = [
   {
     action: "Go live",
     detail: "See the court on the live stage while you mark moments.",
-    href: "/axis/events/new",
+    href: "/axis/live",
     title: "Camera preview",
   },
   {
     action: "Open Intelligence",
-    detail: "Everything Axis learns from, gathered in one place.",
+    detail: "Everything Axis learns from, in one place.",
     href: "/axis/lab/datasets",
     title: "Axis Intelligence",
   },
   {
     action: "Build one",
-    detail: "Turn a session into a recap, teaching points, and a share link.",
+    detail: "Turn a session into a recap and a share link.",
     href: "/axis/packages",
     title: "Package builder",
   },
 ];
 
 const WHATS_NEW_KEY = "axis-whats-new-v1";
-
-function AppLauncher({ onNavigate }: { onNavigate: () => void }) {
-  return (
-    <nav className="axis-suite-pop axis-suite-pop--apps" aria-label="Axis apps">
-      {AXIS_APPS.map((app) => (
-        <Link className="axis-suite-app" href={app.href} key={app.name} onClick={onNavigate}>
-          <span className="axis-suite-glyph">{app.glyph}</span>
-          <strong>{app.name}</strong>
-          <span className="axis-suite-app-sub">{app.sub}</span>
-        </Link>
-      ))}
-    </nav>
-  );
-}
 
 export function AxisSuiteShell({
   backHref,
@@ -74,7 +61,7 @@ export function AxisSuiteShell({
   right?: ReactNode;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState<"apps" | "new" | "account" | null>(null);
+  const [open, setOpen] = useState<"apps" | "more" | null>(null);
   const [hasNew, setHasNew] = useState(false);
 
   useEffect(() => {
@@ -85,8 +72,8 @@ export function AxisSuiteShell({
     return () => window.clearTimeout(timer);
   }, []);
 
-  function toggle(panel: "apps" | "new" | "account") {
-    if (panel === "new" && open !== "new") {
+  function toggle(panel: "apps" | "more") {
+    if (panel === "more" && open !== "more") {
       window.localStorage.setItem(WHATS_NEW_KEY, "seen");
       setHasNew(false);
     }
@@ -108,32 +95,38 @@ export function AxisSuiteShell({
         </div>
         <div className="axis-suite-actions">
           {right}
-          <button
-            aria-label="What's new in Axis"
-            className="axis-suite-iconbtn"
-            onClick={() => toggle("new")}
-            type="button"
-          >
-            ✦{hasNew && <i className="axis-suite-dot" />}
-          </button>
           <button aria-label="Axis apps" className="axis-suite-iconbtn" onClick={() => toggle("apps")} type="button">
             <span className="axis-suite-gridglyph">
               <i /><i /><i /><i /><i /><i /><i /><i /><i />
             </span>
           </button>
           <button
-            aria-label="Account and help"
+            aria-label="More: what's new and help"
             className="axis-suite-iconbtn"
-            onClick={() => toggle("account")}
+            onClick={() => toggle("more")}
             type="button"
           >
-            TL
+            ⋯{hasNew && <i className="axis-suite-dot" />}
           </button>
 
-          {open && <button aria-label="Close menu" className="axis-suite-overlay" onClick={() => setOpen(null)} type="button" />}
-          {open === "apps" && <AppLauncher onNavigate={() => setOpen(null)} />}
-          {open === "new" && (
-            <div className="axis-suite-pop axis-suite-pop--list" aria-label="New in Axis">
+          {open && (
+            <button aria-label="Close menu" className="axis-suite-overlay" onClick={() => setOpen(null)} type="button" />
+          )}
+          {open === "apps" && (
+            <nav className="axis-suite-pop axis-suite-pop--apps" aria-label="Axis apps">
+              {AXIS_APPS.map((app) => (
+                <Link className="axis-suite-app" href={app.href} key={app.name} onClick={() => setOpen(null)}>
+                  <span className={app.tone === "live" ? "axis-suite-glyph axis-suite-glyph--live" : "axis-suite-glyph"}>
+                    {app.glyph}
+                  </span>
+                  <strong>{app.name}</strong>
+                  <span className="axis-suite-app-sub">{app.sub}</span>
+                </Link>
+              ))}
+            </nav>
+          )}
+          {open === "more" && (
+            <div className="axis-suite-pop axis-suite-pop--list" aria-label="What's new and help">
               <p className="axis-suite-pop-title">New in Axis</p>
               {WHATS_NEW.map((item) => (
                 <div className="axis-suite-newitem" key={item.title}>
@@ -144,21 +137,10 @@ export function AxisSuiteShell({
                   </Link>
                 </div>
               ))}
-            </div>
-          )}
-          {open === "account" && (
-            <div className="axis-suite-pop axis-suite-pop--list" aria-label="Account and help">
-              <p className="axis-suite-pop-title">Trophy Labs</p>
-              <div className="axis-suite-newitem">
-                <strong>Axis</strong>
-                <p>Signed in on this device.</p>
+              <div className="axis-suite-newitem axis-suite-newitem--divider">
                 <Link href="/" onClick={() => setOpen(null)}>
                   Public site →
                 </Link>
-              </div>
-              <div className="axis-suite-newitem">
-                <strong>Help</strong>
-                <p>Questions or a stuck session?</p>
                 <a href="mailto:vincent.brown.design@gmail.com?subject=Axis%20help">Get help →</a>
               </div>
             </div>

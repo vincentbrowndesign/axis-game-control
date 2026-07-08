@@ -39,33 +39,6 @@ export function AxisOsStatusChip({ label, tone = "idle" }: { label: string; tone
   return <span className={`axis-os-status axis-os-status--${tone}`}>{label}</span>;
 }
 
-export type AxisOsFlowStep = {
-  label: string;
-  detail?: string;
-  href?: string;
-  state: "done" | "current" | "next";
-};
-
-export function AxisOsFlow({ steps }: { steps: AxisOsFlowStep[] }) {
-  return (
-    <nav className="axis-os-flow" aria-label="Event flow">
-      {steps.map((step) =>
-        step.href ? (
-          <Link className={`axis-os-flowstep axis-os-flowstep--${step.state}`} href={step.href} key={step.label}>
-            <strong>{step.label}</strong>
-            {step.detail ? <span>{step.detail}</span> : null}
-          </Link>
-        ) : (
-          <div className={`axis-os-flowstep axis-os-flowstep--${step.state}`} key={step.label}>
-            <strong>{step.label}</strong>
-            {step.detail ? <span>{step.detail}</span> : null}
-          </div>
-        ),
-      )}
-    </nav>
-  );
-}
-
 export function AxisOsSection({
   label,
   title,
