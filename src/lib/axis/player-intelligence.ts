@@ -328,7 +328,7 @@ export function formatPlayerIntelligenceReport(session: PlayerIntelligenceSessio
     .filter((moment) => moment.whatHappened.trim() || moment.whyItMatters.trim())
     .map((moment, index) => {
       const time = moment.time.trim() ? ` (${moment.time.trim()})` : "";
-      return `${index + 1}. ${moment.category}${time}\nWhat happened: ${orPending(moment.whatHappened)}\nWhy it matters: ${orPending(moment.whyItMatters)}\nNext correction: ${orPending(moment.possibleNextObjective)}`;
+      return `${index + 1}. ${moment.category}${time}\nWhat happened: ${orPending(moment.whatHappened)}\nWhy it matters: ${orPending(moment.whyItMatters)}\nNext objective cue: ${orPending(moment.possibleNextObjective)}`;
     })
     .join("\n\n");
 
@@ -356,11 +356,61 @@ export function formatPlayerIntelligenceReport(session: PlayerIntelligenceSessio
     "Next Objective",
     orPending(session.report.nextObjective),
     "",
-    "Recommended Follow-Up",
+    "Follow-Up Offer",
     orPending(session.report.recommendedFollowUp),
     "",
     "Private note: minor-athlete information stays private unless parent permission says otherwise.",
   ].join("\n");
+}
+
+export function formatPlayerIntelligenceParentRecap(session: PlayerIntelligenceSession) {
+  const recipient = session.permission.approvedRecipients.trim();
+  const playerName = session.intake.playerName.trim() || "[Player Name]";
+  const proofMoments = getPrimaryProofMomentLines(session);
+  const recommendedNextStep =
+    session.report.recommendedFollowUp.trim() ||
+    session.report.developmentPlanDirection.trim() ||
+    session.offer.offerName.trim() ||
+    "Add this in Follow-Up Offer.";
+
+  return [
+    recipient ? `Hey ${recipient},` : "Hey,",
+    "",
+    `Here is the quick recap from ${playerName}'s Trophy Labs Player Intelligence Session.`,
+    "",
+    "What we saw:",
+    orCloseoutPrompt(session.report.developmentRead, "Add this in Report Draft."),
+    "",
+    "Main development priority:",
+    orCloseoutPrompt(session.report.developmentPriority, "Add this in Report Draft."),
+    "",
+    "Proof:",
+    `1. ${proofMoments[0]}`,
+    `2. ${proofMoments[1]}`,
+    `3. ${proofMoments[2]}`,
+    "",
+    "Next objective:",
+    orCloseoutPrompt(session.report.nextObjective, "Add this in Report Draft."),
+    "",
+    "Recommended next step:",
+    recommendedNextStep,
+    "",
+    "The goal is to stop guessing and train from proof.",
+  ].join("\n");
+}
+
+export function getPrimaryProofMomentLines(session: PlayerIntelligenceSession) {
+  const filled = session.proofMoments
+    .slice(0, 3)
+    .map((moment) => {
+      const whatHappened = moment.whatHappened.trim();
+      const whyItMatters = moment.whyItMatters.trim();
+      if (whatHappened && whyItMatters) return `${whatHappened} - ${whyItMatters}`;
+      return whatHappened || whyItMatters || "Add proof moment.";
+    });
+
+  while (filled.length < 3) filled.push("Add proof moment.");
+  return filled;
 }
 
 function migrateLegacyStore(raw: string): PlayerIntelligenceStore {
@@ -449,6 +499,10 @@ function makeCompletion(done: number, total: number): Completion {
 
 function orPending(value: string) {
   return value.trim() || "[draft]";
+}
+
+function orCloseoutPrompt(value: string, prompt: string) {
+  return value.trim() || prompt;
 }
 
 function createId(prefix: string) {

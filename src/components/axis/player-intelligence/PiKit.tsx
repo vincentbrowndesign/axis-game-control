@@ -128,6 +128,10 @@ export function PlayerIntelligenceStyles() {
         border-color: var(--pi-primary);
         color: #050706;
       }
+      .pi-button--done {
+        border-color: rgba(157, 255, 69, 0.7);
+        color: var(--pi-primary);
+      }
       .pi-button:disabled { cursor: not-allowed; opacity: 0.52; }
       .pi-file-button input { display: none; }
       .pi-grid { display: grid; gap: 0.85rem; }
@@ -218,6 +222,60 @@ export function PlayerIntelligenceStyles() {
         line-height: 1.4;
         padding: 0.8rem;
       }
+      .pi-closeout {
+        border-color: rgba(157, 255, 69, 0.32);
+      }
+      .pi-closeout-grid {
+        display: grid;
+        gap: 0.85rem;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      .pi-closeout-grid--proof {
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+      }
+      .pi-closeout-value {
+        color: rgba(246, 248, 240, 0.84);
+        font-size: 0.92rem;
+        line-height: 1.45;
+        margin: 0;
+      }
+      .pi-closeout-proof {
+        color: rgba(246, 248, 240, 0.84);
+        display: grid;
+        gap: 0.55rem;
+        line-height: 1.45;
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+      .pi-closeout-actions {
+        display: grid;
+        gap: 0.65rem;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+      .pi-closeout-actions .pi-button {
+        justify-content: center;
+        min-height: 3.2rem;
+      }
+      .pi-empty {
+        color: rgba(246, 248, 240, 0.48);
+        font-style: italic;
+      }
+      .pi-privacy-note {
+        align-items: center;
+        border: 1px solid rgba(255, 212, 122, 0.38);
+        border-radius: 0.5rem;
+        color: rgba(255, 236, 196, 0.95);
+        display: flex;
+        gap: 0.6rem;
+        line-height: 1.35;
+        padding: 0.8rem;
+      }
+      .pi-copy-status {
+        color: var(--pi-primary);
+        font-size: 0.85rem;
+        font-weight: 750;
+        margin: 0;
+      }
       .pi-table-wrap { overflow-x: auto; }
       .pi-table { border-collapse: separate; border-spacing: 0; min-width: 78rem; width: 100%; }
       .pi-table th, .pi-table td { border-bottom: 1px solid rgba(246, 248, 240, 0.1); padding: 0.45rem; text-align: left; vertical-align: middle; }
@@ -226,7 +284,7 @@ export function PlayerIntelligenceStyles() {
       .pi-table-input { border-radius: 0.35rem; font-size: 0.85rem; min-height: 2.25rem; min-width: 9rem; padding: 0.45rem 0.55rem; }
       .pi-table-check { color: rgba(246, 248, 240, 0.74); font-size: 0.82rem; white-space: nowrap; }
       @media (max-width: 72rem) {
-        .pi-hero, .pi-grid--map, .pi-grid--two, .pi-grid--proof { grid-template-columns: 1fr; }
+        .pi-hero, .pi-grid--map, .pi-grid--two, .pi-grid--proof, .pi-closeout-grid, .pi-closeout-grid--proof, .pi-closeout-actions { grid-template-columns: 1fr; }
         .pi-hero { align-items: start; }
       }
       @media (max-width: 42rem) {

@@ -22,6 +22,7 @@ import {
   getNextFirstTenSessionNumber,
 } from "../../../lib/axis/player-intelligence";
 import { captureChecklist } from "./PlayerIntelligenceData";
+import { PlayerIntelligenceCloseout } from "./PlayerIntelligenceCloseout";
 import { Field, FormCard, IconMark, Meter, Switch } from "./PiKit";
 
 export function SessionWorkflow({
@@ -244,6 +245,12 @@ export function SessionWorkflow({
           <Field label="Axis improvement" textarea value={activeSession.debrief.axisImprovement} onChange={(value) => setDebriefField("axisImprovement", value)} />
         </FormCard>
       </section>
+
+      <PlayerIntelligenceCloseout
+        session={activeSession}
+        onMarkReportSent={() => setReportField("reportSent", true)}
+        onMarkFollowUpOffered={() => setOfferField("followUpOffered", true)}
+      />
     </>
   );
 
