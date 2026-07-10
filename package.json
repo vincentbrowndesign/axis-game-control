@@ -1,0 +1,8 @@
+{
+  "name": "trophy-labs-low-tech-slate",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "vercel-build": "node scripts/vercel-build.mjs"
+  }
+}
