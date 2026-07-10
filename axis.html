@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Axis Worksheet</title>
+    <meta name="description" content="Low-tech Axis worksheet for running a Trophy Labs Player Intelligence Session." />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="index.html">Trophy Labs</a>
+      <nav aria-label="Main navigation">
+        <a href="index.html">Public page</a>
+        <button type="button" onclick="window.print()">Print</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero compact">
+        <p class="eyebrow">Axis internal</p>
+        <h1>Player Intelligence Session Worksheet</h1>
+        <p class="lead">
+          Manual operating sheet for Book -> Intake -> Permission -> Capture Checklist -> Proof Clips -> Report Draft
+          -> Next Objective -> Follow-Up Offer.
+        </p>
+      </section>
+
+      <form class="worksheet">
+        <section class="paper">
+          <h2>1. Intake</h2>
+          <label>Player name <input name="player-name" /></label>
+          <label>Age / grade <input name="age-grade" /></label>
+          <label>Parent goal <textarea name="parent-goal"></textarea></label>
+          <label>Player goal <textarea name="player-goal"></textarea></label>
+          <label>Main reason for booking <textarea name="reason"></textarea></label>
+        </section>
+
+        <section class="paper">
+          <h2>2. Permission</h2>
+          <label class="check"><input type="checkbox" /> Recording permission confirmed</label>
+          <label class="check"><input type="checkbox" /> Private proof clips approved</label>
+          <label class="check"><input type="checkbox" /> Private report approved</label>
+          <label class="check"><input type="checkbox" /> Public content permission approved</label>
+          <label>Restrictions <textarea name="restrictions"></textarea></label>
+        </section>
+
+        <section class="paper">
+          <h2>3. Capture Checklist</h2>
+          <label class="check"><input type="checkbox" /> Camera stable</label>
+          <label class="check"><input type="checkbox" /> Full body visible</label>
+          <label class="check"><input type="checkbox" /> Feet visible</label>
+          <label class="check"><input type="checkbox" /> Ball visible when needed</label>
+          <label class="check"><input type="checkbox" /> Court space visible</label>
+          <label class="check"><input type="checkbox" /> Test clip recorded</label>
+        </section>
+
+        <section class="paper">
+          <h2>4. Proof Clips</h2>
+          <label>Proof clip 1 <textarea name="proof-1"></textarea></label>
+          <label>Proof clip 2 <textarea name="proof-2"></textarea></label>
+          <label>Proof clip 3 <textarea name="proof-3"></textarea></label>
+        </section>
+
+        <section class="paper">
+          <h2>5. Report Draft</h2>
+          <label>Main strength <textarea name="strength"></textarea></label>
+          <label>Development priority <textarea name="priority"></textarea></label>
+          <label>Development read <textarea name="read"></textarea></label>
+        </section>
+
+        <section class="paper">
+          <h2>6. Next Objective + Follow-Up</h2>
+          <label>Next Objective <textarea name="next-objective"></textarea></label>
+          <label>Follow-Up Offer <textarea name="follow-up"></textarea></label>
+          <label>Parent feedback <textarea name="parent-feedback"></textarea></label>
+        </section>
+      </form>
+    </main>
+  </body>
+</html>
+
