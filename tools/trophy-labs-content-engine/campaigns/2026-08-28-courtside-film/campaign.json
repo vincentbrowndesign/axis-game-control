@@ -79,7 +79,7 @@
   "resource": {
     "slug": "courtside-film-setup-checklist",
     "title": "Courtside Film Setup Checklist",
-    "url": "https://trophy-labs.com/guides/courtside-film",
+    "url": "https://ontheaxis.com/guides/courtside-film",
     "files": [
       "resource.html",
       "resource.pdf"
@@ -134,7 +134,7 @@
     "height": 1350,
     "fontsEmbedded": []
   },
-  "generatedAt": "2026-08-28T07:35:27.322Z",
+  "generatedAt": "2026-08-28T08:04:25.146Z",
   "specHash": "35489056cfa430c4433bc4066a4ce3f16f7e07a2c4d79487d5aa8ef0dd2d698d",
   "performance": null
 }

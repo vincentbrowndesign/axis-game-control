@@ -2,7 +2,11 @@
   "name": "Trophy Labs",
   "profile": "@trophy.labs",
   "principle": "MAKER UNDERNEATH. BASKETBALL ON TOP.",
-  "canvas": { "width": 1080, "height": 1350, "safeMargin": 96 },
+  "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "safeMargin": 96
+  },
   "color": {
     "field": "#0B0B0C",
     "fieldRaised": "#141416",
@@ -21,28 +25,55 @@
     "minBodyPx": 34,
     "minMetaPx": 22
   },
-  "resourceHost": "https://trophy-labs.com/guides",
-  "resourceHostAlternates": ["https://ontheaxis.com/guides"],
+  "resourceHost": "https://ontheaxis.com/guides",
+  "resourceHostAlternates": [
+    "https://trophy-labs.com/guides"
+  ],
   "hashtagMax": 8,
   "captionMaxChars": 2200,
   "altTextMaxChars": 1000,
-  "slideCount": { "min": 7, "max": 10 },
+  "slideCount": {
+    "min": 7,
+    "max": 10
+  },
   "productClaimBoundary": {
     "makeMiss": false,
     "formGrades": false,
     "canonicalShotCount": false
   },
   "bannedLanguage": [
-    "guaranteed", "guarantee", "viral", "go viral", "blow up",
-    "thousands of followers", "10x your", "overnight",
-    "secret hack", "growth hack", "algorithm hack",
-    "in less than 15 minutes", "in 15 minutes",
-    "everyone is", "proven system", "instantly",
-    "AI-powered", "revolutionary", "game-changing", "cutting-edge"
+    "guaranteed",
+    "guarantee",
+    "viral",
+    "go viral",
+    "blow up",
+    "thousands of followers",
+    "10x your",
+    "overnight",
+    "secret hack",
+    "growth hack",
+    "algorithm hack",
+    "in less than 15 minutes",
+    "in 15 minutes",
+    "everyone is",
+    "proven system",
+    "instantly",
+    "AI-powered",
+    "revolutionary",
+    "game-changing",
+    "cutting-edge"
   ],
   "bannedCapabilityLanguage": [
-    "makes or misses", "make/miss", "shot chart", "shooting percentage",
-    "form grade", "form score", "grades your form", "shot count",
-    "counts every shot", "tracks every shot", "shooting accuracy"
+    "makes or misses",
+    "make/miss",
+    "shot chart",
+    "shooting percentage",
+    "form grade",
+    "form score",
+    "grades your form",
+    "shot count",
+    "counts every shot",
+    "tracks every shot",
+    "shooting accuracy"
   ]
 }

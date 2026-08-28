@@ -1,6 +1,6 @@
 # Campaign receipt - 2026-08-28-courtside-film
 
-Generated: 2026-08-28T07:35:27.322Z
+Generated: 2026-08-28T08:04:25.146Z
 Engine: trophy-labs-content-engine 1.0.0
 Renderer: /opt/pw-browsers/chromium
 Brand faces embedded: none (system fallback stack)
@@ -53,14 +53,14 @@ Brand faces embedded: none (system fallback stack)
 - `slides/07-practical-value.png` (52633 bytes, sha256 3b34e4a860eb9395)
 - `slides/08-cta.png` (54111 bytes, sha256 b3f380b709e8b0db)
 - `resource.html` (3788 bytes, sha256 ff9bb361062f22ea)
-- `resource.pdf` (50994 bytes, sha256 56d53c495c81d3a6)
+- `resource.pdf` (50994 bytes, sha256 a1cd21f33e4b94d6)
 - `caption.md` (824 bytes, sha256 640688c3034dd4ad)
 - `alt-text.md` (1804 bytes, sha256 0ceb1959c2cab815)
-- `manychat.md` (1920 bytes, sha256 d872a6544d2f5b73)
+- `manychat.md` (1916 bytes, sha256 83d592f939cb4ab0)
 - `sources.md` (2055 bytes, sha256 45cd5c97db2e5b19)
 - `qa.json` (3778 bytes, sha256 8c5a02cc00d54cb2)
 - `performance.json` (495 bytes, sha256 bfc45ed83904aaa2)
-- `campaign.json` (5513 bytes, sha256 8d1aa64d873589e5)
+- `campaign.json` (5511 bytes, sha256 9ea557f79a2d0385)
 
 ## Authority
 

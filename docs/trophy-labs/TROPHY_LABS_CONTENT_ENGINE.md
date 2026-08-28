@@ -152,7 +152,7 @@ a topic backlog, reusable lead magnets, and campaign-to-Film-upload attribution.
 
 The engine writes `resource.html` and `resource.pdf` into the campaign folder. It
 does not host them. Publishing the resource at a durable URL such as
-`https://trophy-labs.com/guides/courtside-film` is a manual step; the host is
+`https://ontheaxis.com/guides/courtside-film` is a manual step; the host is
 configured in `brand/brand.json` and appears in `campaign.json` and the ManyChat
 copy so the DM link and the published page cannot drift apart.
 

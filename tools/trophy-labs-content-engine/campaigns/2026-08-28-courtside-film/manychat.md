@@ -36,7 +36,7 @@ not a follower trap.
 > [OPEN THE CHECKLIST]
 > It covers camera position, framing, lighting, stability, and what needs to remain visible during a shooting rep.
 
-Link target: https://trophy-labs.com/guides/courtside-film
+Link target: https://ontheaxis.com/guides/courtside-film
 
 ## 6. Follow-up DM (send 24h later if unopened)
 
@@ -48,6 +48,6 @@ Link target: https://trophy-labs.com/guides/courtside-film
 - [ ] Keyword `FILM` attached to the published post only
 - [ ] Opening DM enabled (required before the follow step exists)
 - [ ] Follow request left skippable
-- [ ] Resource link live at https://trophy-labs.com/guides/courtside-film
+- [ ] Resource link live at https://ontheaxis.com/guides/courtside-film
 - [ ] Follow-up scheduled
 - [ ] Campaign performance fields recorded after 7 days
