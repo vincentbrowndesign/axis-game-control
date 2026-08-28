@@ -1,0 +1,22 @@
+{
+  "campaignId": "2026-08-28-courtside-film",
+  "measuredAt": null,
+  "windowDays": 7,
+  "measured": {
+    "reach": null,
+    "carouselCompletionRate": null,
+    "saves": null,
+    "shares": null,
+    "profileVisits": null,
+    "follows": null,
+    "keywordComments": null,
+    "openingDmsSent": null,
+    "dmOptIns": null,
+    "followRequestConversions": null,
+    "resourceClicks": null,
+    "unfollows": null,
+    "websiteVisits": null,
+    "qualifiedFilmUploads": null
+  },
+  "notes": ""
+}

@@ -1,0 +1,140 @@
+{
+  "campaignId": "2026-08-28-courtside-film",
+  "profile": "@trophy.labs",
+  "title": "Why your basketball film isn't telling you anything",
+  "date": "2026-08-28",
+  "pillar": "basketball_film_education",
+  "sourceType": "original_topic",
+  "sourceReferences": [],
+  "centralQuestion": "Why does recorded basketball footage so rarely become useful basketball information?",
+  "pointOfView": "Film is only valuable when a coach can return to the moments that mattered without rewatching the whole session. Capture quality decides how much of that is possible, and it is decided before any analysis runs.",
+  "hooks": {
+    "chosen": "YOUR CAMERA ROLL ISN'T A FILM LAB.",
+    "alternates": [
+      "YOU RECORDED THE WORKOUT. NOW WHO WATCHES IT?",
+      "40 MINUTES OF FOOTAGE. FOUR MINUTES THAT MATTER."
+    ]
+  },
+  "narrative": "problem_to_operating_model",
+  "slideCount": 8,
+  "slides": [
+    {
+      "index": 1,
+      "name": "hook",
+      "primitive": "HOOK",
+      "file": "slides/01-hook.png",
+      "alt": "Slide 1 of 8. Large white condensed text on a near-black background reading: Your camera roll isn't a film lab. An orange bar sits under the headline."
+    },
+    {
+      "index": 2,
+      "name": "problem",
+      "primitive": "PROBLEM",
+      "file": "slides/02-problem.png",
+      "alt": "Slide 2 of 8. An orange label reads The problem. White text reads: You recorded 40 minutes of basketball. Now somebody has to watch all 40 minutes again."
+    },
+    {
+      "index": 3,
+      "name": "friction",
+      "primitive": "FILM_FRAME",
+      "file": "slides/03-friction.png",
+      "alt": "Slide 3 of 8. A strip of seven empty film frames runs across the slide with a single frame outlined in orange. Text reads: The useful moments are buried between setup, rebounds, walking, resets, and dead time."
+    },
+    {
+      "index": 4,
+      "name": "coaching-reality",
+      "primitive": "BIG_STATEMENT",
+      "file": "slides/04-coaching-reality.png",
+      "alt": "Slide 4 of 8. An orange label reads Coaching reality. Large white text reads: In the gym, the coach's job is to coach. Smaller grey text underneath reads: Not stop after every rep to organize video."
+    },
+    {
+      "index": 5,
+      "name": "operating-model",
+      "primitive": "SEQUENCE",
+      "file": "slides/05-operating-model.png",
+      "alt": "Slide 5 of 8. An orange label reads A better operating model. A numbered sequence lists four steps: one, record. Two, add film. Three, keep coaching. Four, return to the moments."
+    },
+    {
+      "index": 6,
+      "name": "honest-intelligence",
+      "primitive": "QUOTE",
+      "file": "slides/06-honest-intelligence.png",
+      "alt": "Slide 6 of 8. Large white text reads: A useful basketball system should show what the film supports, and hold back when it can't tell. Attributed to a Trophy Labs operating principle."
+    },
+    {
+      "index": 7,
+      "name": "practical-value",
+      "primitive": "CHECKLIST",
+      "file": "slides/07-practical-value.png",
+      "alt": "Slide 7 of 8. An orange label reads Better film starts before analysis. A checklist with orange marks lists: stable camera, bright view, player visible, ball visible, hoop visible when possible."
+    },
+    {
+      "index": 8,
+      "name": "cta",
+      "primitive": "CTA",
+      "file": "slides/08-cta.png",
+      "alt": "Slide 8 of 8. An orange block reads Comment FILM. Text underneath reads: and we'll send you the Courtside Film Setup Checklist."
+    }
+  ],
+  "keyword": "FILM",
+  "resource": {
+    "slug": "courtside-film-setup-checklist",
+    "title": "Courtside Film Setup Checklist",
+    "url": "https://trophy-labs.com/guides/courtside-film",
+    "files": [
+      "resource.html",
+      "resource.pdf"
+    ]
+  },
+  "claims": [
+    {
+      "claim": "Stable, unobstructed film is easier to analyze than shaky or obstructed film",
+      "status": "SUPPORTED",
+      "basis": "Direct consequence of how the current Axis vision path works: the player box needs a visible, well-lit subject to hold a lock. Stated as a capture principle, not a measured result.",
+      "sources": []
+    },
+    {
+      "claim": "A recorded session has to be rewatched manually before it becomes useful information",
+      "status": "SUPPORTED",
+      "basis": "True by construction of the status quo the post describes - a raw camera roll file carries no index of its own.",
+      "sources": []
+    },
+    {
+      "claim": "40 minutes of recorded basketball",
+      "status": "ILLUSTRATIVE",
+      "basis": "A stated example of a typical gym session length, not a statistic and not a measured Trophy Labs figure.",
+      "sources": []
+    },
+    {
+      "claim": "Trophy Labs holds back when the film cannot support a conclusion",
+      "status": "SUPPORTED",
+      "basis": "Axis abstention is an active product rule in this repo, not a roadmap promise.",
+      "sources": []
+    }
+  ],
+  "productClaims": {
+    "makeMiss": false,
+    "formGrades": false,
+    "canonicalShotCount": false
+  },
+  "humanApproval": "REQUIRED",
+  "publicationAuthorization": false,
+  "qa": {
+    "status": "PASSED",
+    "pass": 30,
+    "warn": 0,
+    "fail": 0
+  },
+  "engine": {
+    "name": "trophy-labs-content-engine",
+    "version": "1.0.0"
+  },
+  "render": {
+    "renderer": "/opt/pw-browsers/chromium",
+    "width": 1080,
+    "height": 1350,
+    "fontsEmbedded": []
+  },
+  "generatedAt": "2026-08-28T07:35:27.322Z",
+  "specHash": "35489056cfa430c4433bc4066a4ce3f16f7e07a2c4d79487d5aa8ef0dd2d698d",
+  "performance": null
+}

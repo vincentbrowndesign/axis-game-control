@@ -45,6 +45,7 @@ Open phone
 | `docs/capsules/AXIS_AUTH.md` | ACTIVE | Auth and owner-scoped session save boundaries. |
 | `docs/capsules/AXIS_SESSION_MEMORY.md` | ACTIVE | A1 session memory object, memory page, and build sequence. |
 | `docs/capsules/AXIS_DATA_ASSET_LAYER.md` | ACTIVE FOUNDATION | Data asset vocabulary and future boundary. No runtime data asset operations. |
+| `docs/trophy-labs/TROPHY_LABS_CONTENT_ENGINE.md` | ACTIVE - INTERNAL OPS | Marketing and operations instrument alongside Trophy Labs. Not an Axis product surface and not a build unlock. |
 
 ## Reference Docs
 
