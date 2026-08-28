@@ -1,0 +1,14 @@
+{
+  "name": "trophy-labs-content-engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Internal Trophy Labs content engine. Turns one basketball topic into an approval-gated Instagram carousel campaign package. Not part of the Axis app.",
+  "bin": { "trophy-labs": "./engine/cli.mjs" },
+  "scripts": {
+    "generate": "node engine/cli.mjs generate",
+    "qa": "node engine/cli.mjs qa",
+    "selftest": "node engine/cli.mjs selftest"
+  },
+  "engines": { "node": ">=20" }
+}

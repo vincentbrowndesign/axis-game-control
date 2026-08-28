@@ -1,0 +1,160 @@
+{
+  "status": "PASSED",
+  "counts": {
+    "pass": 30,
+    "warn": 0,
+    "fail": 0
+  },
+  "findings": [
+    {
+      "level": "PASS",
+      "check": "structure.slide_count",
+      "detail": "8 slides"
+    },
+    {
+      "level": "PASS",
+      "check": "structure.opens_on_hook",
+      "detail": "slide 1 is a HOOK"
+    },
+    {
+      "level": "PASS",
+      "check": "structure.closes_on_cta",
+      "detail": "slide 8 is a CTA"
+    },
+    {
+      "level": "PASS",
+      "check": "structure.known_primitives",
+      "detail": "all slides use approved primitives"
+    },
+    {
+      "level": "PASS",
+      "check": "structure.hook_alternates",
+      "detail": "2 alternate hooks recorded"
+    },
+    {
+      "level": "PASS",
+      "check": "a11y.alt_text_present",
+      "detail": "8 alt descriptions"
+    },
+    {
+      "level": "PASS",
+      "check": "a11y.alt_text_length",
+      "detail": "longest alt 209 chars"
+    },
+    {
+      "level": "PASS",
+      "check": "language.banned_marketing",
+      "detail": "no promise language found"
+    },
+    {
+      "level": "PASS",
+      "check": "claims.capability_boundary",
+      "detail": "no unqualified capability language"
+    },
+    {
+      "level": "PASS",
+      "check": "claims.product_claims",
+      "detail": "all product claims held at false"
+    },
+    {
+      "level": "PASS",
+      "check": "claims.undeclared_figures",
+      "detail": "1 figure(s), all declared"
+    },
+    {
+      "level": "PASS",
+      "check": "claims.unsupported_present",
+      "detail": "no unsupported claims in the package"
+    },
+    {
+      "level": "PASS",
+      "check": "claims.basis_recorded",
+      "detail": "4 claim(s) carry a basis"
+    },
+    {
+      "level": "PASS",
+      "check": "source.lineage",
+      "detail": "0 source reference(s) for original_topic"
+    },
+    {
+      "level": "PASS",
+      "check": "caption.length",
+      "detail": "616 chars"
+    },
+    {
+      "level": "PASS",
+      "check": "caption.hashtag_count",
+      "detail": "6 hashtags"
+    },
+    {
+      "level": "PASS",
+      "check": "keyword.on_cta_slide",
+      "detail": "CTA slide asks for FILM"
+    },
+    {
+      "level": "PASS",
+      "check": "keyword.in_caption",
+      "detail": "caption asks for FILM"
+    },
+    {
+      "level": "PASS",
+      "check": "resource.exists",
+      "detail": "10-item resource: Courtside Film Setup Checklist"
+    },
+    {
+      "level": "PASS",
+      "check": "resource.delivery_link_slot",
+      "detail": "delivery DM carries the link slot"
+    },
+    {
+      "level": "PASS",
+      "check": "manychat.follow_request_requires_opening_dm",
+      "detail": "opening DM present for the follow step"
+    },
+    {
+      "level": "PASS",
+      "check": "visual.token_colors",
+      "detail": "47 text layers use brand tokens only"
+    },
+    {
+      "level": "PASS",
+      "check": "visual.min_text_size",
+      "detail": "smallest 24px"
+    },
+    {
+      "level": "PASS",
+      "check": "visual.contrast",
+      "detail": "lowest ratio 5.74:1"
+    },
+    {
+      "level": "PASS",
+      "check": "visual.overflow",
+      "detail": "8 slides fit the safe area"
+    },
+    {
+      "level": "PASS",
+      "check": "visual.measured_text_size",
+      "detail": "smallest fitted copy 38px"
+    },
+    {
+      "level": "PASS",
+      "check": "resource.mobile_fit",
+      "detail": "resource page fits 500px with no horizontal scroll"
+    },
+    {
+      "level": "PASS",
+      "check": "resource.mobile_text_size",
+      "detail": "smallest resource text 12px"
+    },
+    {
+      "level": "PASS",
+      "check": "authority.human_approval",
+      "detail": "human approval REQUIRED"
+    },
+    {
+      "level": "PASS",
+      "check": "authority.publication",
+      "detail": "publication authorization withheld"
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+{
+  "campaignId": "2026-08-28-courtside-film",
+  "date": "2026-08-28",
+  "profile": "@trophy.labs",
+  "pillar": "basketball_film_education",
+  "title": "Why your basketball film isn't telling you anything",
+  "sourceType": "original_topic",
+  "sourceReferences": [],
+  "centralQuestion": "Why does recorded basketball footage so rarely become useful basketball information?",
+  "pointOfView": "Film is only valuable when a coach can return to the moments that mattered without rewatching the whole session. Capture quality decides how much of that is possible, and it is decided before any analysis runs.",
+  "hooks": {
+    "chosen": "YOUR CAMERA ROLL ISN'T A FILM LAB.",
+    "alternates": [
+      "YOU RECORDED THE WORKOUT. NOW WHO WATCHES IT?",
+      "40 MINUTES OF FOOTAGE. FOUR MINUTES THAT MATTER."
+    ]
+  },
+  "narrative": "problem_to_operating_model",
+  "slides": [
+    {
+      "primitive": "HOOK",
+      "name": "hook",
+      "lines": ["Your", "camera roll", "isn't a", "film lab."],
+      "alt": "Slide 1 of 8. Large white condensed text on a near-black background reading: Your camera roll isn't a film lab. An orange bar sits under the headline."
+    },
+    {
+      "primitive": "PROBLEM",
+      "name": "problem",
+      "eyebrow": "The problem",
+      "lines": [
+        "You recorded 40 minutes of basketball.",
+        "Now somebody has to watch all 40 minutes again."
+      ],
+      "alt": "Slide 2 of 8. An orange label reads The problem. White text reads: You recorded 40 minutes of basketball. Now somebody has to watch all 40 minutes again."
+    },
+    {
+      "primitive": "FILM_FRAME",
+      "name": "friction",
+      "eyebrow": "Where the time goes",
+      "frames": { "count": 7, "active": [3] },
+      "lines": [
+        "The useful moments are buried between setup, rebounds, walking, resets, and dead time."
+      ],
+      "alt": "Slide 3 of 8. A strip of seven empty film frames runs across the slide with a single frame outlined in orange. Text reads: The useful moments are buried between setup, rebounds, walking, resets, and dead time."
+    },
+    {
+      "primitive": "BIG_STATEMENT",
+      "name": "coaching-reality",
+      "eyebrow": "Coaching reality",
+      "lines": ["In the gym,", "the coach's job", "is to coach."],
+      "note": "Not stop after every rep to organize video.",
+      "alt": "Slide 4 of 8. An orange label reads Coaching reality. Large white text reads: In the gym, the coach's job is to coach. Smaller grey text underneath reads: Not stop after every rep to organize video."
+    },
+    {
+      "primitive": "SEQUENCE",
+      "name": "operating-model",
+      "eyebrow": "A better operating model",
+      "steps": ["Record", "Add film", "Keep coaching", "Return to the moments"],
+      "alt": "Slide 5 of 8. An orange label reads A better operating model. A numbered sequence lists four steps: one, record. Two, add film. Three, keep coaching. Four, return to the moments."
+    },
+    {
+      "primitive": "QUOTE",
+      "name": "honest-intelligence",
+      "quote": "A useful basketball system should show what the film supports - and hold back when it can't tell.",
+      "attribution": "Trophy Labs operating principle",
+      "alt": "Slide 6 of 8. Large white text reads: A useful basketball system should show what the film supports, and hold back when it can't tell. Attributed to a Trophy Labs operating principle."
+    },
+    {
+      "primitive": "CHECKLIST",
+      "name": "practical-value",
+      "eyebrow": "Better film starts before analysis",
+      "items": [
+        "Stable camera",
+        "Bright view",
+        "Player visible",
+        "Ball visible",
+        "Hoop visible when possible"
+      ],
+      "alt": "Slide 7 of 8. An orange label reads Better film starts before analysis. A checklist with orange marks lists: stable camera, bright view, player visible, ball visible, hoop visible when possible."
+    },
+    {
+      "primitive": "CTA",
+      "name": "cta",
+      "eyebrow": "How to get it",
+      "keyword": "FILM",
+      "resourceLead": "and we'll send you the",
+      "resourceName": "Courtside film setup checklist",
+      "resourceNameLines": ["Courtside film", "setup checklist."],
+      "alt": "Slide 8 of 8. An orange block reads Comment FILM. Text underneath reads: and we'll send you the Courtside Film Setup Checklist."
+    }
+  ],
+  "caption": {
+    "body": "Most basketball film never becomes useful basketball information.\n\nIt gets recorded, buried in a camera roll, and forgotten - or somebody has to rewatch the entire session manually.\n\nWe're building Trophy Labs around a simpler loop:\nrecord -> add Film -> keep coaching -> return to the moments\n\nThe intelligence underneath should find what the evidence supports and hold back when it doesn't know.\n\nComment FILM and we'll send you our Courtside Film Setup Checklist for capturing footage that's easier to break down.",
+    "hashtags": [
+      "#BasketballTraining",
+      "#BasketballCoach",
+      "#PlayerDevelopment",
+      "#BasketballFilm",
+      "#ShootingCoach",
+      "#TrophyLabs"
+    ]
+  },
+  "keyword": "FILM",
+  "resource": {
+    "slug": "courtside-film-setup-checklist",
+    "path": "courtside-film",
+    "title": "Courtside Film Setup Checklist",
+    "subtitle": "Capture footage that is easier to break down.",
+    "intro": "A one-page setup pass before you press record. Nothing here depends on Trophy Labs - it makes any basketball film easier to review.",
+    "items": [
+      "Put the camera behind or diagonally beside the shooter",
+      "Keep the player's full body in frame",
+      "Include the hoop when possible",
+      "Use a stable tripod or fixed surface",
+      "Avoid shooting directly into bright lights",
+      "Prefer a bright indoor court for the current V1",
+      "Keep the ball visible at release and during flight",
+      "Avoid frequent zooming or camera movement",
+      "Record complete reps instead of stopping immediately after release",
+      "Upload the original-quality file when practical"
+    ],
+    "closing": ["Record", "Add film", "Keep coaching", "Return to the breakdown"]
+  },
+  "manychat": {
+    "publicReply": "Sent it - check your DMs. \ud83c\udfc0",
+    "openingDm": "Want the Trophy Labs Courtside Film Setup Checklist?",
+    "openingButton": "SEND THE CHECKLIST",
+    "followRequest": {
+      "enabled": true,
+      "optional": true,
+      "copy": "Before I send it, follow trophy.labs so you don't miss the Film breakdowns and basketball intelligence we're building.",
+      "skipButton": "JUST SEND IT"
+    },
+    "deliveryDm": "Here it is - the Courtside Film Setup Checklist:\n[OPEN THE CHECKLIST]\nIt covers camera position, framing, lighting, stability, and what needs to remain visible during a shooting rep.",
+    "followUpDm": "Were you able to open it?\nIf you're recording a workout soon, reply with what kind of session it is and I'll suggest the cleanest camera position."
+  },
+  "claims": [
+    {
+      "claim": "Stable, unobstructed film is easier to analyze than shaky or obstructed film",
+      "status": "SUPPORTED",
+      "basis": "Direct consequence of how the current Axis vision path works: the player box needs a visible, well-lit subject to hold a lock. Stated as a capture principle, not a measured result."
+    },
+    {
+      "claim": "A recorded session has to be rewatched manually before it becomes useful information",
+      "status": "SUPPORTED",
+      "basis": "True by construction of the status quo the post describes - a raw camera roll file carries no index of its own."
+    },
+    {
+      "claim": "40 minutes of recorded basketball",
+      "status": "ILLUSTRATIVE",
+      "basis": "A stated example of a typical gym session length, not a statistic and not a measured Trophy Labs figure."
+    },
+    {
+      "claim": "Trophy Labs holds back when the film cannot support a conclusion",
+      "status": "SUPPORTED",
+      "basis": "Axis abstention is an active product rule in this repo, not a roadmap promise."
+    }
+  ],
+  "productClaims": {
+    "makeMiss": false,
+    "formGrades": false,
+    "canonicalShotCount": false
+  },
+  "notes": "First campaign. Deliberately says nothing about AI, Codex, or the content engine - the customer cares about basketball film."
+}

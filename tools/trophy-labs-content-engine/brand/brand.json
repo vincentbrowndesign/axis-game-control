@@ -1,0 +1,79 @@
+{
+  "name": "Trophy Labs",
+  "profile": "@trophy.labs",
+  "principle": "MAKER UNDERNEATH. BASKETBALL ON TOP.",
+  "canvas": {
+    "width": 1080,
+    "height": 1350,
+    "safeMargin": 96
+  },
+  "color": {
+    "field": "#0B0B0C",
+    "fieldRaised": "#141416",
+    "ink": "#FFFFFF",
+    "inkSoft": "#B9B9C0",
+    "inkMeta": "#8A8A92",
+    "signal": "#EE6A2C",
+    "signalInk": "#0B0B0C",
+    "line": "#2A2A2E"
+  },
+  "type": {
+    "displayStack": "'Trophy Display','Archivo Narrow','Barlow Condensed','Liberation Sans Narrow','Helvetica Neue Condensed Bold','Arial Narrow','Liberation Sans',sans-serif",
+    "bodyStack": "'Trophy Body','Inter','Liberation Sans','DejaVu Sans',sans-serif",
+    "metaStack": "'Trophy Mono','DejaVu Sans Mono','Liberation Mono',monospace",
+    "minDisplayPx": 56,
+    "minBodyPx": 34,
+    "minMetaPx": 22
+  },
+  "resourceHost": "https://ontheaxis.com/guides",
+  "resourceHostAlternates": [
+    "https://trophy-labs.com/guides"
+  ],
+  "hashtagMax": 8,
+  "captionMaxChars": 2200,
+  "altTextMaxChars": 1000,
+  "slideCount": {
+    "min": 7,
+    "max": 10
+  },
+  "productClaimBoundary": {
+    "makeMiss": false,
+    "formGrades": false,
+    "canonicalShotCount": false
+  },
+  "bannedLanguage": [
+    "guaranteed",
+    "guarantee",
+    "viral",
+    "go viral",
+    "blow up",
+    "thousands of followers",
+    "10x your",
+    "overnight",
+    "secret hack",
+    "growth hack",
+    "algorithm hack",
+    "in less than 15 minutes",
+    "in 15 minutes",
+    "everyone is",
+    "proven system",
+    "instantly",
+    "AI-powered",
+    "revolutionary",
+    "game-changing",
+    "cutting-edge"
+  ],
+  "bannedCapabilityLanguage": [
+    "makes or misses",
+    "make/miss",
+    "shot chart",
+    "shooting percentage",
+    "form grade",
+    "form score",
+    "grades your form",
+    "shot count",
+    "counts every shot",
+    "tracks every shot",
+    "shooting accuracy"
+  ]
+}
